@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APP_TITLE</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+    <div id="canvas-wrapper">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <div class="panel">
+        <div class="status-card">
+            <div id="turn-display">--</div>
+            <div class="btn-group">
+                <button id="btn-pve" class="active">PVE</button>
+                <button id="btn-pvp">PVP</button>
+            </div>
+            <div class="ai-config" style="margin-top: 15px;">
+                <label style="font-size: 12px; color: #888; display: block; margin-bottom: 5px;">AI ENGINE</label>
+                <select id="ai-personality" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 8px; outline: none;">
+                    <option value="aggressive" selected>MODE_A</option>
+                    <option value="conservative">MODE_B</option>
+                </select>
+            </div>
+        </div>
+        
+        <button id="btn-reset" style="border-color: rgba(255, 77, 77, 0.3); color: #ff4d4d">RESET</button>
+        
+        <div id="log-container"></div>
+    </div>
+</div>
+
+<!-- VICTORY SCREEN -->
+<div id="victory-overlay" class="hidden">
+    <div class="victory-card">
+        <h1 id="victory-title">VICTORY</h1>
+        <p id="victory-msg">--</p>
+        <div class="victory-stats">
+            <span id="victory-time">--</span>
+        </div>
+        <button id="btn-restart-win">RESTART</button>
+    </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
