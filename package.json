@@ -1,0 +1,20 @@
+{
+  "name": "animal-chess",
+  "version": "2.6.1",
+  "description": "斗兽棋 Pro - 模块化霓虹版",
+  "main": "game.js",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "echo \"Error: no test specified\" && exit 0"
+  },
+  "keywords": [
+    "game",
+    "animal-chess",
+    "ai"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "eslint": "^8.56.0"
+  }
+}
