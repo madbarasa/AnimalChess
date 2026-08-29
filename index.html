@@ -8,6 +8,9 @@
 </head>
 <body>
 
+<!-- 第三个动态光晕球 -->
+<div class="bg-orb"></div>
+
 <div id="app">
     <div id="canvas-wrapper">
         <canvas id="gameCanvas"></canvas>
@@ -20,17 +23,17 @@
                 <button id="btn-pve" class="active">PVE</button>
                 <button id="btn-pvp">PVP</button>
             </div>
-            <div class="ai-config" style="margin-top: 15px;">
-                <label style="font-size: 12px; color: #888; display: block; margin-bottom: 5px;">AI ENGINE</label>
-                <select id="ai-personality" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 8px; outline: none;">
+            <div class="ai-config">
+                <label>AI ENGINE</label>
+                <select id="ai-personality">
                     <option value="aggressive" selected>MODE_A</option>
                     <option value="conservative">MODE_B</option>
                 </select>
             </div>
         </div>
-        
-        <button id="btn-reset" style="border-color: rgba(255, 77, 77, 0.3); color: #ff4d4d">RESET</button>
-        
+
+        <button id="btn-reset">RESET</button>
+
         <div id="log-container"></div>
     </div>
 </div>

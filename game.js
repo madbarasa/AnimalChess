@@ -404,6 +404,7 @@ onmessage = function(e) {
 
         document.getElementById('log-container').innerHTML = '';
         document.getElementById('victory-overlay').classList.add('hidden');
+        document.querySelectorAll('.confetti').forEach(el => el.remove());
 
         // 读取界面设置
         const pSelect = document.getElementById('ai-personality');
@@ -629,18 +630,42 @@ onmessage = function(e) {
                 ctx.stroke();
             }
 
-            ctx.fillStyle = '#111322';
+            // 棋子发光光晕
+            const glowAlpha = 0.15 + Math.sin(this.pulse) * 0.05;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 15;
+
+            // 棋子底色（深色玻璃质感）
+            const grad = ctx.createLinearGradient(p.x + 10, p.y + 10, p.x + 10, p.y + CONFIG.cell - 10);
+            grad.addColorStop(0, 'rgba(30, 33, 55, 0.9)');
+            grad.addColorStop(0.5, 'rgba(17, 19, 34, 0.95)');
+            grad.addColorStop(1, 'rgba(10, 12, 22, 1)');
+            ctx.fillStyle = grad;
             ctx.beginPath();
             ctx.roundRect(p.x + 10, p.y + 10, CONFIG.cell - 20, CONFIG.cell - 20, 15);
             ctx.fill();
+
+            ctx.shadowBlur = 0;
+
+            // 棋子边框（霓虹发光）
             ctx.strokeStyle = color;
             ctx.lineWidth = 2;
             ctx.stroke();
 
+            // 顶部高光（模拟玻璃反光）
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+            ctx.beginPath();
+            ctx.roundRect(p.x + 12, p.y + 12, CONFIG.cell - 24, (CONFIG.cell - 24) * 0.4, [15, 15, 0, 0]);
+            ctx.fill();
+
+            // 棋子文字
             ctx.fillStyle = color;
-            ctx.font = "bold 20px sans-serif"; // 使用标准无衬线字体
+            ctx.font = "bold 20px sans-serif";
             ctx.textAlign = "center";
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 8;
             ctx.fillText(p.name, centerX, centerY + 7);
+            ctx.shadowBlur = 0;
         });
 
         if (!this.isStateAnimating()) this.needsRedraw = false;
@@ -751,8 +776,26 @@ onmessage = function(e) {
         time.innerText = CONFIG.UI_TEXT.timeTaken(mins, secs);
 
         overlay.classList.remove('hidden');
+        this.spawnConfetti(side === 'red' ? '#ff4d4d' : '#00f2fe');
         this.log(CONFIG.UI_TEXT.gameEnd(sideText), 'system');
         this.triggerRedraw();
+    }
+
+    spawnConfetti(mainColor) {
+        const colors = [mainColor, '#00f2fe', '#ff4d4d', '#f9ca24', '#39ff14', '#a855f7', '#ffffff'];
+        for (let i = 0; i < 60; i++) {
+            const el = document.createElement('div');
+            el.className = 'confetti';
+            el.style.left = Math.random() * 100 + '%';
+            el.style.background = colors[Math.floor(Math.random() * colors.length)];
+            el.style.width = (6 + Math.random() * 8) + 'px';
+            el.style.height = (6 + Math.random() * 8) + 'px';
+            el.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+            el.style.animationDuration = (2 + Math.random() * 3) + 's';
+            el.style.animationDelay = Math.random() * 0.5 + 's';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 6000);
+        }
     }
 }
 
