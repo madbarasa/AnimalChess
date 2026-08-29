@@ -366,10 +366,14 @@ onmessage = function(e) {
         this.pulse = 0;
         this.startTime = Date.now();
         this.needsRedraw = true;
+        this.turnCount = 1;
+        this.particles = [];
 
         this.init();
         this.applyStaticText();
         this.bindEvents();
+        this.updateStats();
+        this.startTimer();
         this.animate();
     }
 
@@ -396,6 +400,8 @@ onmessage = function(e) {
         this.gameOver = false;
         this.selected = null;
         this.startTime = Date.now();
+        this.turnCount = 1;
+        this.particles = [];
 
         const bPos = [[0, 0, 8], [0, 6, 7], [0, 4, 6], [2, 4, 5], [2, 2, 4], [2, 6, 3], [1, 5, 2], [2, 0, 1]];
         bPos.forEach(p => this.addPiece(p[0], p[1], p[2], 'blue'));
@@ -413,6 +419,7 @@ onmessage = function(e) {
         const pName = this.personality === 'aggressive' ? CONFIG.UI_TEXT.aggressive : CONFIG.UI_TEXT.conservative;
         this.log(CONFIG.UI_TEXT.enterMode(pName, CONFIG.VERSION), "system");
         this.updateUI();
+        this.updateStats();
         this.triggerRedraw();
     }
 
@@ -442,6 +449,115 @@ onmessage = function(e) {
             display.innerText = this.turn === 'red' ? CONFIG.UI_TEXT.redTurn : CONFIG.UI_TEXT.blueTurn;
             display.style.color = this.turn === 'red' ? "var(--neon-red)" : "var(--neon-blue)";
         }
+    }
+
+    startTimer() {
+        if (this.timerInterval) clearInterval(this.timerInterval);
+        this.timerInterval = setInterval(() => {
+            if (!this.gameOver) this.updateStats();
+        }, 1000);
+    }
+
+    updateStats() {
+        // 统计棋子数
+        let redCount = 0, blueCount = 0;
+        for (let r = 0; r < CONFIG.rows; r++) {
+            for (let c = 0; c < CONFIG.cols; c++) {
+                const p = this.board[r][c];
+                if (p) {
+                    if (p.color === 'red') redCount++;
+                    else blueCount++;
+                }
+            }
+        }
+
+        // 计算时间
+        const totalSec = Math.floor((Date.now() - this.startTime) / 1000);
+        const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
+        const s = (totalSec % 60).toString().padStart(2, '0');
+
+        // 渲染 DOM
+        const stats = document.getElementById('stats-panel');
+        if (stats) {
+            stats.innerHTML = `
+                <div class="stat-row">
+                    <div class="stat-item red-stat">
+                        <div class="stat-dot" style="background:var(--neon-red);box-shadow:0 0 8px var(--neon-red)"></div>
+                        <span class="stat-label">红方</span>
+                        <span class="stat-value">${redCount}/8</span>
+                    </div>
+                    <div class="stat-item blue-stat">
+                        <div class="stat-dot" style="background:var(--neon-blue);box-shadow:0 0 8px var(--neon-blue)"></div>
+                        <span class="stat-label">蓝方</span>
+                        <span class="stat-value">${blueCount}/8</span>
+                    </div>
+                </div>
+                <div class="stat-row">
+                    <div class="stat-item">
+                        <span class="stat-mini">回合</span>
+                        <span class="stat-num">${this.turnCount}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-mini">用时</span>
+                        <span class="stat-num">${m}:${s}</span>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    getValidMoves(p) {
+        const moves = [];
+        // 尝试四周 (狮虎跳河由 canMove 处理)
+        for (let tr = 0; tr < CONFIG.rows; tr++) {
+            for (let tc = 0; tc < CONFIG.cols; tc++) {
+                if (this.canMove(p, tr, tc)) moves.push({ r: tr, c: tc });
+            }
+        }
+        return moves;
+    }
+
+    spawnEatParticles(r, c, color) {
+        const cx = c * CONFIG.cell + CONFIG.cell / 2;
+        const cy = r * CONFIG.cell + CONFIG.cell / 2;
+        const pColor = color === 'red' ? '#ff4d4d' : '#00f2fe';
+        for (let i = 0; i < 20; i++) {
+            const angle = (Math.PI * 2 * i) / 20 + Math.random() * 0.3;
+            const speed = 2 + Math.random() * 4;
+            this.particles.push({
+                x: cx,
+                y: cy,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 1,
+                decay: 0.02 + Math.random() * 0.02,
+                size: 3 + Math.random() * 5,
+                color: pColor
+            });
+        }
+    }
+
+    updateParticles() {
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.08; // 轻微重力
+            p.life -= p.decay;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+    }
+
+    drawParticles(ctx) {
+        this.particles.forEach(p => {
+            ctx.globalAlpha = Math.max(0, p.life);
+            ctx.fillStyle = p.color;
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 8;
+            ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        });
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
     }
 
     triggerRedraw() { this.needsRedraw = true; }
@@ -575,46 +691,159 @@ onmessage = function(e) {
     draw() {
         const { ctx, canvas } = this;
         this.pulse = (this.pulse + 0.05) % (Math.PI * 2);
-        if (!this.needsRedraw && !this.isStateAnimating()) return;
+        const hasParticles = this.particles.length > 0;
+        if (!this.needsRedraw && !this.isStateAnimating() && !hasParticles) return;
 
+        this.updateParticles();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = 'rgba(0, 242, 254, 0.03)';
+
+        // === 1. 发光网格线 ===
+        ctx.strokeStyle = 'rgba(0, 242, 254, 0.06)';
+        ctx.lineWidth = 1;
         for (let i = 0; i <= CONFIG.cols; i++) {
             ctx.beginPath(); ctx.moveTo(i * CONFIG.cell, 0); ctx.lineTo(i * CONFIG.cell, canvas.height); ctx.stroke();
         }
         for (let i = 0; i <= CONFIG.rows; i++) {
             ctx.beginPath(); ctx.moveTo(0, i * CONFIG.cell); ctx.lineTo(canvas.width, i * CONFIG.cell); ctx.stroke();
         }
+        // 交叉点发光
+        ctx.fillStyle = 'rgba(0, 242, 254, 0.1)';
+        for (let i = 0; i <= CONFIG.cols; i++) {
+            for (let j = 0; j <= CONFIG.rows; j++) {
+                ctx.beginPath();
+                ctx.arc(i * CONFIG.cell, j * CONFIG.cell, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
 
+        // === 2. 河道 - 波纹动画 ===
         CONFIG.rivers.forEach(([r, c]) => {
             const x = c * CONFIG.cell, y = r * CONFIG.cell;
-            ctx.fillStyle = 'rgba(0, 242, 254, 0.08)';
+            // 水色渐变填充
+            const waterGrad = ctx.createRadialGradient(
+                x + CONFIG.cell / 2, y + CONFIG.cell / 2, 0,
+                x + CONFIG.cell / 2, y + CONFIG.cell / 2, CONFIG.cell / 1.5
+            );
+            waterGrad.addColorStop(0, 'rgba(0, 200, 255, 0.2)');
+            waterGrad.addColorStop(1, 'rgba(0, 120, 200, 0.05)');
+            ctx.fillStyle = waterGrad;
             ctx.fillRect(x + 2, y + 2, CONFIG.cell - 4, CONFIG.cell - 4);
-            ctx.strokeStyle = `rgba(0, 242, 254, ${0.15 + Math.sin(this.pulse) * 0.05})`;
-            ctx.strokeRect(x + 4, y + 4, CONFIG.cell - 8, CONFIG.cell - 8);
+
+            // 动态波纹
+            ctx.strokeStyle = `rgba(0, 242, 254, ${0.25 + Math.sin(this.pulse + r + c) * 0.1})`;
+            ctx.lineWidth = 1;
+            for (let w = 0; w < 2; w++) {
+                const wy = y + CONFIG.cell * 0.35 + w * 18 + Math.sin(this.pulse * 2 + r + c + w) * 3;
+                ctx.beginPath();
+                ctx.moveTo(x + 10, wy);
+                ctx.bezierCurveTo(
+                    x + CONFIG.cell * 0.3, wy - 3,
+                    x + CONFIG.cell * 0.5, wy + 3,
+                    x + CONFIG.cell - 10, wy
+                );
+                ctx.stroke();
+            }
         });
 
+        // === 3. 陷阱 - X 锯齿图案 ===
         CONFIG.traps.forEach(t => {
             const x = t.c * CONFIG.cell, y = t.r * CONFIG.cell;
-            ctx.strokeStyle = t.side === 'red' ? 'rgba(255, 77, 77, 0.4)' : 'rgba(0, 242, 254, 0.4)';
-            ctx.setLineDash([5, 5]);
-            ctx.strokeRect(x + 10, y + 10, CONFIG.cell - 20, CONFIG.cell - 20);
+            const trapColor = t.side === 'red' ? '#ff4d4d' : '#00f2fe';
+            const alpha = 0.35 + Math.sin(this.pulse + t.r) * 0.1;
+
+            // 危险底色
+            ctx.fillStyle = `rgba(${t.side === 'red' ? '255,77,77' : '0,242,254'}, 0.05)`;
+            ctx.fillRect(x + 5, y + 5, CONFIG.cell - 10, CONFIG.cell - 10);
+
+            // X 标记
+            ctx.strokeStyle = `rgba(${t.side === 'red' ? '255,77,77' : '0,242,254'}, ${alpha})`;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 3]);
+            // 对角线 X
+            ctx.beginPath();
+            ctx.moveTo(x + 14, y + 14);
+            ctx.lineTo(x + CONFIG.cell - 14, y + CONFIG.cell - 14);
+            ctx.moveTo(x + CONFIG.cell - 14, y + 14);
+            ctx.lineTo(x + 14, y + CONFIG.cell - 14);
+            ctx.stroke();
+            // 外边框虚线
+            ctx.strokeRect(x + 8, y + 8, CONFIG.cell - 16, CONFIG.cell - 16);
             ctx.setLineDash([]);
         });
 
+        // === 4. 兽穴 - 传送门发光效果 ===
         CONFIG.dens.forEach(d => {
-            const x = d.c * CONFIG.cell + CONFIG.cell / 2, y = d.r * CONFIG.cell + CONFIG.cell / 2;
+            const cx = d.c * CONFIG.cell + CONFIG.cell / 2;
+            const cy = d.r * CONFIG.cell + CONFIG.cell / 2;
             const color = d.side === 'red' ? '#ff4d4d' : '#00f2fe';
+
+            // 多层脉冲光圈
+            for (let i = 3; i >= 0; i--) {
+                const radius = 30 + i * 6 + Math.sin(this.pulse + i) * 3;
+                ctx.beginPath();
+                ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(${d.side === 'red' ? '255,77,77' : '0,242,254'}, ${0.08 - i * 0.015})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // 内圈发光
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 18;
             ctx.beginPath();
-            ctx.arc(x, y, 20 + Math.sin(this.pulse) * 4, 0, Math.PI * 2);
+            ctx.arc(cx, cy, 20 + Math.sin(this.pulse) * 3, 0, Math.PI * 2);
             ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
             ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // 中心实心
+            const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 14);
+            coreGrad.addColorStop(0, '#fff');
+            coreGrad.addColorStop(0.3, color);
+            coreGrad.addColorStop(1, `rgba(${d.side === 'red' ? '255,77,77' : '0,242,254'}, 0.1)`);
             ctx.beginPath();
-            ctx.arc(x, y, 12, 0, Math.PI * 2);
-            ctx.fillStyle = color;
+            ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+            ctx.fillStyle = coreGrad;
             ctx.fill();
         });
 
+        // === 5. 可走点提示 ===
+        if (this.selected && this.selected.color === this.turn) {
+            const moves = this.getValidMoves(this.selected);
+            moves.forEach(m => {
+                const mx = m.c * CONFIG.cell + CONFIG.cell / 2;
+                const my = m.r * CONFIG.cell + CONFIG.cell / 2;
+                const target = this.board[m.r][m.c];
+                if (target) {
+                    // 可捕食目标 - 红色方框警告
+                    ctx.strokeStyle = `rgba(255, 80, 80, ${0.7 + Math.sin(this.pulse * 3) * 0.2})`;
+                    ctx.lineWidth = 2.5;
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    ctx.roundRect(m.c * CONFIG.cell + 6, m.r * CONFIG.cell + 6, CONFIG.cell - 12, CONFIG.cell - 12, 10);
+                    ctx.stroke();
+                } else {
+                    // 普通可走点 - 发光圆点
+                    const glow = 0.5 + Math.sin(this.pulse * 2 + m.r + m.c) * 0.25;
+                    ctx.shadowColor = this.turn === 'red' ? '#ff4d4d' : '#00f2fe';
+                    ctx.shadowBlur = 10;
+                    ctx.fillStyle = `rgba(${this.turn === 'red' ? '255,77,77' : '0,242,254'}, ${glow})`;
+                    ctx.beginPath();
+                    ctx.arc(mx, my, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+
+                    // 内圈更亮
+                    ctx.fillStyle = `rgba(255,255,255,${glow * 0.7})`;
+                    ctx.beginPath();
+                    ctx.arc(mx, my, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+
+        // === 6. 棋子 ===
         this.board.flat().forEach(p => {
             if (!p) return;
             p.x += (p.targetX - p.x) * 0.25;
@@ -622,16 +851,20 @@ onmessage = function(e) {
             const color = p.color === 'red' ? '#ff4d4d' : '#00f2fe';
             const centerX = p.x + CONFIG.cell / 2, centerY = p.y + CONFIG.cell / 2;
 
+            // 选中态：脉冲发光环
             if (this.selected === p) {
+                const pulseR = CONFIG.cell / 2 - 4 + Math.sin(this.pulse * 2) * 2;
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 20;
                 ctx.beginPath();
-                ctx.arc(centerX, centerY, CONFIG.cell / 2 - 5, 0, Math.PI * 2);
-                ctx.strokeStyle = "white";
-                ctx.lineWidth = 2;
+                ctx.roundRect(p.x + 8, p.y + 8, CONFIG.cell - 16, CONFIG.cell - 16, 16);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2.5;
                 ctx.stroke();
+                ctx.shadowBlur = 0;
             }
 
             // 棋子发光光晕
-            const glowAlpha = 0.15 + Math.sin(this.pulse) * 0.05;
             ctx.shadowColor = color;
             ctx.shadowBlur = 15;
 
@@ -668,7 +901,10 @@ onmessage = function(e) {
             ctx.shadowBlur = 0;
         });
 
-        if (!this.isStateAnimating()) this.needsRedraw = false;
+        // === 7. 粒子特效 (吃子) ===
+        this.drawParticles(ctx);
+
+        if (!this.isStateAnimating() && !hasParticles) this.needsRedraw = false;
     }
 
     isStateAnimating() {
@@ -685,6 +921,7 @@ onmessage = function(e) {
         if (target) {
             const side = p.color === 'red' ? CONFIG.UI_TEXT.redBrief : CONFIG.UI_TEXT.blueBrief;
             this.log(CONFIG.UI_TEXT.eatAction(side, p.name, target.name), p.color);
+            this.spawnEatParticles(tr, tc, target.color);
         }
 
         this.board[p.r][p.c] = null;
@@ -696,9 +933,12 @@ onmessage = function(e) {
         if (this.isDenOccupied(this.board, p.color)) return this.win(p.color);
 
         this.turn = this.turn === 'red' ? 'blue' : 'red';
+        // 红方走后回合数+1
+        if (this.turn === 'red') this.turnCount++;
         this.selected = null;
         this.isThinking = false;
         this.updateUI();
+        this.updateStats();
         this.triggerRedraw();
 
         if (this.mode === 'pve' && this.turn === 'blue' && !this.gameOver) {

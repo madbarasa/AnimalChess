@@ -162,7 +162,7 @@ body::after {
     text-align: center;
     text-transform: uppercase;
     letter-spacing: 2px;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     text-shadow: 0 0 20px currentColor;
     animation: turnPulse 2s ease-in-out infinite;
 }
@@ -170,6 +170,71 @@ body::after {
 @keyframes turnPulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
+}
+
+/* ===== 侧边统计面板 ===== */
+#stats-panel {
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.stat-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+.stat-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.stat-label {
+    color: rgba(255, 255, 255, 0.65);
+    font-weight: 500;
+}
+
+.stat-value {
+    font-weight: 900;
+    font-size: 14px;
+    margin-left: auto;
+}
+
+.red-stat .stat-value {
+    color: var(--neon-red);
+}
+.blue-stat .stat-value {
+    color: var(--neon-blue);
+}
+
+.stat-mini {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stat-num {
+    font-weight: 900;
+    font-size: 16px;
+    color: white;
+    font-family: 'Consolas', 'Monaco', monospace;
 }
 
 /* ===== 按钮组 ===== */
