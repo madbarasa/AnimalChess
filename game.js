@@ -95,8 +95,11 @@ function ai_lionTigerMobility(animal) {
 function ai_sbe(map, ply, aiturn) {
     const neg = 1; 
     const cost = ply * 0.1 * neg;
-    if (map[3][0].animal) return -2000 * neg + cost; // 蓝方兽穴被占
-    if (map[3][8].animal) return 2000 * neg + cost;  // 红方兽穴被占
+    // 兽穴占用判定：只认「被对方棋子占据」才算胜负，己方棋子误入己方兽穴不参与评分
+    const blueDenAnimal = map[3][0].animal;
+    if (blueDenAnimal && blueDenAnimal.color === 1) return -2000 * neg + cost; // 红子占据蓝方兽穴
+    const redDenAnimal = map[3][8].animal;
+    if (redDenAnimal && redDenAnimal.color === 0) return 2000 * neg + cost;  // 蓝子占据红方兽穴
 
     let a = 0, b = 0;
     let mouseA = null, mouseB = null, elephantA = null, elephantB = null;
@@ -155,8 +158,11 @@ function ai_exitSbe(map, ply, aiturn) {
     const blueTurn = aiturn;
     ply++;
 
-    if (map[3][0].animal) return -2000 * ply * neg;
-    if (map[3][8].animal) return 2000 * ply * neg;
+    // 兽穴占用判定同样区分归属（与 ai_sbe 保持一致）
+    const exitBlueDen = map[3][0].animal;
+    if (exitBlueDen && exitBlueDen.color === 1) return -2000 * ply * neg;
+    const exitRedDen = map[3][8].animal;
+    if (exitRedDen && exitRedDen.color === 0) return 2000 * ply * neg;
 
     let blueCount = 0, redCount = 0;
     let blueAnims = [], redAnims = [];
