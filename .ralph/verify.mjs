@@ -259,27 +259,27 @@ try {
 
 console.log('\n=== MUST：终局判定（P1-6）与主线程规则一致性（P2-1） ===');
 
-// 在 vm 里加载 rules.js + game.js，只用 Game.prototype 的纯逻辑方法，不触碰真实 DOM。
-function makeHeadlessGame(Game) {
+// 在 vm 里加载 config.js + rules.js + game-state.js + game.js，只用纯逻辑方法，不触碰真实 DOM。
+function makeHeadlessGame(Game, GameState, config) {
   const g = Object.create(Game.prototype);
-  g.board = Array(ROWS).fill().map(() => Array(COLS).fill(null));
-  g.turn = 'red';
+  g.state = new GameState(config);
+  // 测试用空棋盘：不沿用默认开局摆子
+  g.state.board = Array(g.state.rows).fill().map(() => Array(g.state.cols).fill(null));
   g.mode = 'pvp';
-  g.gameOver = false;
   g.isThinking = false;
-  g.selected = null;
   g.startTime = Date.now();
   g.log = () => {};
   g.updateUI = () => {};
   g.triggerRedraw = () => {};
   g.shakeEffect = () => {};
   g.aiAction = () => { g._aiCalled = true; };
-  g.win = (side) => { g._won = side; g.gameOver = true; };
-  g.drawGame = (side) => { g._drawn = side; g.gameOver = true; };
+  g.win = (side) => { g._won = side; g.state.gameOver = true; };
+  g.drawGame = (side) => { g._drawn = side; g.state.gameOver = true; };
   g.add = (r, c, rank, color) => {
-    g.board[r][c] = { rank, color, r, c, name: '\u5b50', x: 0, y: 0, targetX: 0, targetY: 0 };
-    return g.board[r][c];
+    g.state.board[r][c] = { rank, color, r, c, name: '\u5b50', x: 0, y: 0, targetX: 0, targetY: 0 };
+    return g.state.board[r][c];
   };
+  Object.defineProperty(g, 'board', { get: () => g.state.board });
   return g;
 }
 
@@ -287,14 +287,18 @@ try {
   const gameSrc = read('game.js');
   const sandbox = { document: { addEventListener() {} } };
   vm.createContext(sandbox);
+  vm.runInContext(read('config.js'), sandbox);
   vm.runInContext(read('rules.js'), sandbox);
+  vm.runInContext(read('game-state.js'), sandbox);
   vm.runInContext(gameSrc + '\n;globalThis.__Game = Game;', sandbox);
   const Game = sandbox.__Game;
   const R = sandbox.AnimalChessRules;
+  const GameState = sandbox.AnimalChessGameState;
+  const config = sandbox.AnimalChessConfig;
 
   // 吃光对方最后一子 → 判负
   {
-    const g = makeHeadlessGame(Game);
+    const g = makeHeadlessGame(Game, GameState, config);
     const lion = g.add(0, 0, 7, 'red');
     g.add(0, 1, 1, 'blue');
     g.executeMove(lion, 0, 1);
@@ -303,7 +307,7 @@ try {
 
   // 轮走方无合法走法 → 判和
   {
-    const g = makeHeadlessGame(Game);
+    const g = makeHeadlessGame(Game, GameState, config);
     g.add(0, 0, 7, 'blue'); // 蓝狮被两枚红象堵死
     g.add(0, 1, 8, 'red');
     g.add(1, 0, 8, 'red');
@@ -314,7 +318,7 @@ try {
 
   // 进兽穴判胜优先级不变
   {
-    const g = makeHeadlessGame(Game);
+    const g = makeHeadlessGame(Game, GameState, config);
     g.add(0, 3, 1, 'blue');
     g.executeMove(g.add(1, 3, 7, 'red'), 0, 3);
     must('P1-6 进兽穴仍判胜', g._won === 'red', JSON.stringify({ won: g._won, drawn: g._drawn }));
@@ -322,7 +326,7 @@ try {
 
   // P2-1 主线程与 rules.js 是同一实现：开局所有起点/终点逐一比对
   {
-    const g = makeHeadlessGame(Game);
+    const g = makeHeadlessGame(Game, GameState, config);
     [[0,0,8],[0,6,7],[0,4,6],[2,4,5],[2,2,4],[2,6,3],[1,5,2],[2,0,1]]
       .forEach(([r, c, rank]) => g.add(r, c, rank, 'blue'));
     [[8,6,8],[8,0,7],[8,2,6],[6,2,5],[6,4,4],[6,0,3],[7,1,2],[6,6,1]]
@@ -354,11 +358,126 @@ try {
   must('P1-6 / P2-1 逻辑测试可运行', false, String(e.message || e).slice(0, 300));
 }
 
+console.log('\n=== MUST：渲染/状态拆分（P2-3） ===');
+
+try {
+  const html = read('index.html');
+  const scriptPos = (name) => html.search(new RegExp(`<script[^>]+src=["'][^"']*${name.replace('.', '\\.')}`));
+  const order = ['config.js', 'rules.js', 'ai-worker.js', 'renderer.js', 'game-state.js', 'game.js'].map(scriptPos);
+  must('P2-3 renderer.js / game-state.js 存在', exists('renderer.js') && exists('game-state.js'));
+  must('P2-3 index.html 依次加载 config → rules → ai-worker → renderer → game-state → game',
+    order.every((p, i) => p !== -1 && (i === 0 || order[i - 1] < p)), JSON.stringify(order));
+
+  const gameSrc = read('game.js');
+  must('P2-3 game.js 不再直接操作 canvas 绘制',
+    !/getContext\s*\(|fillRect|strokeRect|fillText|clearRect|roundRect/.test(gameSrc));
+  must('P2-3 game.js 仍为入口（DOMContentLoaded + new Game）',
+    /DOMContentLoaded/.test(gameSrc) && /new Game\s*\(/.test(gameSrc));
+
+  const sandbox = { document: { addEventListener() {} } };
+  vm.createContext(sandbox);
+  vm.runInContext(read('config.js'), sandbox);
+  vm.runInContext(read('rules.js'), sandbox);
+  vm.runInContext(read('renderer.js'), sandbox);
+  vm.runInContext(read('game-state.js'), sandbox);
+  const Config = sandbox.AnimalChessConfig;
+  const GameState = sandbox.AnimalChessGameState;
+  const Renderer = sandbox.AnimalChessRenderer;
+  const R = sandbox.AnimalChessRules;
+
+  must('P2-3 暴露 AnimalChessRenderer / AnimalChessGameState',
+    typeof Renderer === 'function' && typeof GameState === 'function');
+
+  const state = new GameState(Config);
+  must('P2-3 GameState 初始化 16 子、红先、未终局',
+    state.board.flat().filter(Boolean).length === 16 && state.turn === 'red' && !state.gameOver);
+
+  // 无 DOM 渲染冒烟：用假的 2D context 调 draw，必须产生实际绘制调用且不抛错
+  const draws = { fillRect: 0, fillText: 0, arc: 0, strokeRect: 0 };
+  const ctx = new Proxy({}, {
+    get(t, k) {
+      if (Object.prototype.hasOwnProperty.call(draws, k)) return () => { draws[k]++; };
+      if (!(k in t)) t[k] = () => {};
+      return t[k];
+    },
+    set(t, k, v) { t[k] = v; return true; }
+  });
+  const canvas = { width: 0, height: 0, getContext: () => ctx };
+  const renderer = new Renderer(canvas, Config);
+  let drawError = '';
+  try {
+    renderer.draw(state.board, state.board[0][0]);
+  } catch (e) {
+    drawError = String(e.message || e);
+  }
+  must('P2-3 Renderer 可无 DOM 绘制（河道/陷阱/兽穴/棋子均有绘制）',
+    !drawError && draws.fillRect > 0 && draws.strokeRect > 0 && draws.arc > 0 && draws.fillText > 0, drawError);
+  must('P2-3 Renderer 按配置设置画布尺寸',
+    canvas.width === Config.BOARD.cols * Config.BOARD.cell && canvas.height === Config.BOARD.rows * Config.BOARD.cell,
+    `${canvas.width}x${canvas.height}`);
+
+  // GameState 与 rules.js 仍是同一实现（拆分不能引入第二套规则）
+  const rulesBoard = state.getAiCompatibleMap();
+  let stateMismatches = 0;
+  for (let x1 = 0; x1 < COLS; x1++) {
+    for (let y1 = 0; y1 < ROWS; y1++) {
+      const p = state.board[y1][x1];
+      if (!p) continue;
+      for (let x2 = 0; x2 < COLS; x2++) {
+        for (let y2 = 0; y2 < ROWS; y2++) {
+          if (!!state.canMove(p, y2, x2) !== !!R.canMove(rulesBoard, x1, y1, x2, y2)) stateMismatches++;
+        }
+      }
+    }
+  }
+  must('P2-3 GameState.canMove 全坐标与 rules 一致', stateMismatches === 0, `不一致 ${stateMismatches} 处`);
+} catch (e) {
+  must('P2-3 渲染/状态拆分测试可运行', false, String(e.message || e).slice(0, 300));
+}
+
+console.log('\n=== MUST：配置分离（P2-4） ===');
+
+try {
+  const html = read('index.html');
+  const scriptPos = (name) => html.search(new RegExp(`<script[^>]+src=["'][^"']*${name.replace('.', '\\.')}`));
+  must('P2-4 config.js 存在并在 rules.js 之前加载',
+    exists('config.js') && scriptPos('config.js') !== -1 && scriptPos('config.js') < scriptPos('rules.js'));
+
+  const sandbox = createSandbox();
+  vm.runInContext(read('config.js'), sandbox);
+  const Config = sandbox.AnimalChessConfig;
+  must('P2-4 配置暴露 VERSION / BOARD / RULES / UI_TEXT',
+    !!Config && typeof Config.VERSION === 'string' &&
+    !!(Config.BOARD && Config.RULES && Config.UI_TEXT));
+  must('P2-4 规则数据独立为 RULES（rivers/traps/dens/pst）',
+    !!(Config.RULES.rivers && Config.RULES.traps && Config.RULES.dens && Config.RULES.pst));
+  must('P2-4 UI 文案独立为 UI_TEXT（不含规则数据）',
+    typeof Config.UI_TEXT.redTurn === 'string' &&
+    !Object.prototype.hasOwnProperty.call(Config.UI_TEXT, 'rivers') &&
+    Config.UI_TEXT !== Config.RULES);
+  must('P2-4 迁移后规则数据未变（rivers/traps/dens 与基线一致）',
+    JSON.stringify(Config.RULES.rivers) === JSON.stringify(RIVERS) &&
+    JSON.stringify(Config.RULES.traps) === JSON.stringify(TRAPS) &&
+    JSON.stringify(Config.RULES.dens) === JSON.stringify(DENS));
+  must('P2-4 开局摆子数据移入配置（蓝红各 8 子）',
+    Config.RULES.startPositions.blue.length === 8 && Config.RULES.startPositions.red.length === 8);
+
+  const gameSrc = read('game.js');
+  must('P2-4 game.js 不再内嵌规则数据',
+    !/(rivers|traps|dens|pst)\s*:/.test(gameSrc), 'game.js 仍有规则数据字面量');
+  must('P2-4 game.js 改为消费 AnimalChessConfig', /AnimalChessConfig/.test(gameSrc));
+} catch (e) {
+  must('P2-4 配置分离测试可运行', false, String(e.message || e).slice(0, 300));
+}
+
 console.log('\n=== TARGET：任务进度（不阻断提交）===');
 
 target('P2-1 规则已抽到 rules.js', exists('rules.js'));
 target('P2-2 AI 已移出模板字符串', !!(exists('ai-worker.js') || exists('worker.js')));
-target('P3-3 已适配 devicePixelRatio', exists('game.js') && /devicePixelRatio/.test(read('game.js')));
+target('P2-3 Game 已拆分渲染/状态职责', exists('renderer.js') && exists('game-state.js'));
+target('P2-4 配置已分离', exists('config.js'));
+target('P3-3 已适配 devicePixelRatio', /(window|self|globalThis)\.devicePixelRatio/.test(
+  (exists('renderer.js') ? read('renderer.js') : '') + (exists('game.js') ? read('game.js') : '')));
 target('P3-4 存在响应式样式', exists('style.css') && /@media/.test(read('style.css')));
 target('P3-5 日志有上限', exists('game.js') && /(maxLog|LOG_LIMIT|slice\(0,\s*\d+\))/.test(read('game.js')));
 target('P4-1 存在 ESLint 配置', ['eslint.config.js', 'eslint.config.mjs', '.eslintrc', '.eslintrc.js', '.eslintrc.json', '.eslintrc.cjs'].some(exists));
