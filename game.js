@@ -257,15 +257,24 @@ function getOrderedMoves(map, animal) {
     return possibleMoves;
 }
 
-let isTimeUp = false;
-let bestDecisionGlobal = null;
+// 搜索上下文：一次搜索的全部可变状态都收在这里，不再挂在 Worker 顶层。
+// 好处：多次搜索互不串味、可并行（每次 new 一个）、方便把搜索逻辑单独拿出来测。
+function createSearchContext(maxTime) {
+    return {
+        startTime: Date.now(),
+        maxTime,
+        isTimeUp: false,
+        bestDecision: null,
+        rootPly: 0
+    };
+}
 
 // Alpha-Beta 剪枝深度搜索
 // 超时中断约定：返回 null 表示「本层结果不完整」，调用方必须整条分支作废，
 // 绝不能把中断值当成真实评估参与 alpha/beta 比较。
-function alphaBetaPruning(map, ply, alpha, beta, aiturn, maxPly, startTime, maxTime) {
-    if (Date.now() - startTime >= maxTime) {
-        isTimeUp = true;
+function alphaBetaPruning(ctx, map, ply, alpha, beta, aiturn) {
+    if (Date.now() - ctx.startTime >= ctx.maxTime) {
+        ctx.isTimeUp = true;
         return null;
     }
 
@@ -300,7 +309,7 @@ function alphaBetaPruning(map, ply, alpha, beta, aiturn, maxPly, startTime, maxT
         movingAnimal.point.x = x2;
         movingAnimal.point.y = y2;
 
-        const res = alphaBetaPruning(map, ply - 1, alpha, beta, !aiturn, maxPly, startTime, maxTime);
+        const res = alphaBetaPruning(ctx, map, ply - 1, alpha, beta, !aiturn);
 
         // 回溯还原
         map[x1][y1].animal = movingAnimal;
@@ -309,12 +318,12 @@ function alphaBetaPruning(map, ply, alpha, beta, aiturn, maxPly, startTime, maxT
         movingAnimal.point.y = y1;
 
         // 子节点被超时中断：本层结果不完整，整条分支作废并继续向上冒泡
-        if (isTimeUp || res === null) return null;
+        if (ctx.isTimeUp || res === null) return null;
 
         if (aiturn) {
             if (res > bestVal) {
                 bestVal = res;
-                if (ply === maxPly) bestDecisionGlobal = { x1, y1, x2, y2 };
+                if (ply === ctx.rootPly) ctx.bestDecision = { x1, y1, x2, y2 };
             }
             alpha = Math.max(alpha, bestVal);
         } else {
@@ -349,27 +358,27 @@ function pickFallbackDecision(map) {
 onmessage = function(e) {
     const { map, personality, maxTime = 1500 } = e.data;
     
-    isTimeUp = false;
     let finalDecision = null;
     let maxDepth = personality === 'aggressive' ? 7 : 4; 
-    let startTime = Date.now();
+    const ctx = createSearchContext(maxTime);
 
     // 迭代加深搜索
     for (let depth = 1; depth <= maxDepth; depth++) {
-        bestDecisionGlobal = null;
-        const searchValue = alphaBetaPruning(map, depth, -Infinity, Infinity, true, depth, startTime, maxTime);
+        ctx.bestDecision = null;
+        ctx.rootPly = depth;
+        const searchValue = alphaBetaPruning(ctx, map, depth, -Infinity, Infinity, true);
         
         // 本层被超时中断：结果不完整，直接丢弃该层，
         // finalDecision 保留上一层搜索完成的完整结果。
-        if (isTimeUp || searchValue === null) {
+        if (ctx.isTimeUp || searchValue === null) {
             break;
         }
         
-        if (bestDecisionGlobal) {
-            finalDecision = bestDecisionGlobal;
+        if (ctx.bestDecision) {
+            finalDecision = ctx.bestDecision;
         }
         
-        if (Date.now() - startTime >= maxTime * 0.8) {
+        if (Date.now() - ctx.startTime >= maxTime * 0.8) {
             break;
         }
     }
