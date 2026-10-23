@@ -68,23 +68,23 @@ $pnpm = "C:\Users\hohox\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\pnpm\
 
 ### P3 性能与体验
 
-- [ ] **P3-1** 静止时停止 rAF 空转（改为按需调度）
-- [ ] **P3-2** 修复脉冲动画冻结：河道/兽穴呼吸效果在空闲时也连续
-- [ ] **P3-3** canvas 适配 `devicePixelRatio`（高分屏清晰）
-- [ ] **P3-4** 响应式布局：窄屏下棋盘缩放、面板换行，不裁切
-- [ ] **P3-5** 日志条数上限（建议 200 条），避免长局 DOM 膨胀
-- [ ] **P3-6** 键盘可操作：方向键 + 回车选子/落子，`Esc` 取消
-- [ ] **P3-7** 基础无障碍：canvas 加 `aria-label`，按钮/下拉补 `aria-*`
+- [x] **P3-1** 静止时停止 rAF 空转（改为按需调度）
+- [x] **P3-2** 修复脉冲动画冻结：河道/兽穴呼吸效果在空闲时也连续
+- [x] **P3-3** canvas 适配 `devicePixelRatio`（高分屏清晰）
+- [x] **P3-4** 响应式布局：窄屏下棋盘缩放、面板换行，不裁切
+- [x] **P3-5** 日志条数上限（建议 200 条），避免长局 DOM 膨胀
+- [x] **P3-6** 键盘可操作：方向键 + 回车选子/落子，`Esc` 取消
+- [x] **P3-7** 基础无障碍：canvas 加 `aria-label`，按钮/下拉补 `aria-*`
 - [ ] **P3-8（可选）** WebAudio 合成音效：走子 / 吃子 / 胜利（无外部资源）
 
 ### P4 工程卫生
 
-- [ ] **P4-1** 补 ESLint 配置，让 `pnpm run lint` 真正可跑；CI 去掉 `|| true`
-- [ ] **P4-2** 版本号三处对齐（`README.md` ↔ `package.json` ↔ `CONFIG.VERSION`）
-- [ ] **P4-3** 许可证统一：新增 MIT `LICENSE`，`package.json` 改 `"MIT"`
-- [ ] **P4-4** README 安装命令去掉 `your-username` 占位
-- [ ] **P4-5** `index.html` 占位符替换为真实文案（`APP_TITLE` / `MODE_A` / `MODE_B`），保留 JS 覆盖逻辑
-- [ ] **P4-6** Pages 部署收窄：只发布静态资源，排除 `.github` 等
+- [x] **P4-1** 补 ESLint 配置，让 `pnpm run lint` 真正可跑；CI 去掉 `|| true`
+- [x] **P4-2** 版本号三处对齐（`README.md` ↔ `package.json` ↔ `CONFIG.VERSION`）
+- [x] **P4-3** 许可证统一：新增 MIT `LICENSE`，`package.json` 改 `"MIT"`
+- [x] **P4-4** README 安装命令去掉 `your-username` 占位
+- [x] **P4-5** `index.html` 占位符替换为真实文案（`APP_TITLE` / `MODE_A` / `MODE_B`），保留 JS 覆盖逻辑
+- [x] **P4-6** Pages 部署收窄：只发布静态资源，排除 `.github` 等
 - [ ] **P4-7（可选）** ESLint 升级到 9 / flat config
 
 ## 4. 完成标准

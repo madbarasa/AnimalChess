@@ -88,3 +88,32 @@
 - 每轮必须先读本文件与 `TASKS.md`，再跑一次 `.\.ralph\verify.cmd` 确认基线。
 - 可用任务：P3-1…P3-7 / P4-1…P4-6。
 
+### 第 5 轮 — 2026-10-23 10:38（手动接管）
+- 完成：
+  - P3-1（commit `f0d7e29`）静止时停止 rAF 空转：`renderer.isIdle(board)` + `animate()` 按需调度
+  - P3-2（同上）河道/兽穴呼吸改为 CSS `@keyframes`（`#river-pulse`），canvas 静态底色
+  - P3-3（同上）`renderer.adjustSize()` 适配 `devicePixelRatio`，高分屏清晰
+  - P3-4（同上）`style.css` 新增 `@media ≤960px` / `≤600px` 响应式断点
+  - P3-5（同上）日志上限 200（`Game.MAX_LOGS`，超出时移除最旧条目）
+  - P3-6（同上）键盘操作：方向键/WASD 预览 + Enter 确认 + Esc 取消
+  - P3-7（同上）无障碍：canvas `aria-label`、turn-display `aria-live`、按钮 `aria-pressed`、对话框 `role=dialog`
+  - P4-1（同上）新增 `.eslintrc.json`（browser + IIFE globals），CI 去掉 `|| true`
+  - P4-2（同上）版本号三处对齐：`README.md` / `package.json` / `config.js` → `2.6.1`
+  - P4-3（同上）新增 MIT `LICENSE`，`package.json` 改 `"MIT"`
+  - P4-4（同上）README 安装命令去掉 `your-username` 占位，改用 `madbarasa`
+  - P4-5（同上）`index.html` 占位符全部替换为真实中文文案
+  - P4-6（同上）Pages 部署 `exclusion_patterns` 排除 `.github/.ralph/*.md` 等元数据
+- 验证：`.\.ralph\verify.cmd` MUST 全绿；ESLint 0 错误 1 warning（`canvas` unused，可忽略）
+- 注意：
+  - P3-2 的河道脉冲改用 CSS 后，verify.mjs 要求 canvas 中仍有 `fillRect`（静态底色），已保留
+  - `asar-list.cjs` 和 `pi-ai-README.zh.md` 是非本任务文件，未提交、未删除
+- 下一轮：所有必做任务已完成，无需继续。
+
+## 任务完成总结
+
+- P1 全部 6 项 ✅（commit e762be2…affb507）
+- P2 全部 4 项 ✅（commit 78a854c…fd2549c）
+- P3 必做 7 项 ✅（commit f0d7e29）
+- P4 必做 6 项 ✅（同上）
+- **全部 23 项必做任务完成**，`node .ralph/verify.mjs` MUST 全绿，ESLint 无错误。
+
