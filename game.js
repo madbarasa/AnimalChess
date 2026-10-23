@@ -480,8 +480,9 @@ onmessage = function(e) {
 
     checkEat(p, target, tr, tc, board) {
         if (!target) return true;
-        const inOwnTrap = CONFIG.traps.some(t => t.r === tr && t.c === tc && t.side === p.color);
-        if (inOwnTrap) return true;
+        // 目标格位于「我方陷阱」时，落在陷阱中的防守棋子等级视为 0，任何棋子均可捕食
+        const targetInOwnTrap = CONFIG.traps.some(t => t.r === tr && t.c === tc && t.side === p.color);
+        if (targetInOwnTrap) return true;
 
         const pInRiver = this.isRiver(p.r, p.c);
         const targetInRiver = this.isRiver(tr, tc);
