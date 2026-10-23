@@ -56,6 +56,9 @@ class Game {
         this.isThinking = false;
         this.gameId = 0;
 
+        // P3-3：适配高分屏（devicePixelRatio），在 init 前调用
+        this.renderer.adjustSize();
+
         this.init();
         this.applyStaticText();
         this.bindEvents();
@@ -97,12 +100,19 @@ class Game {
         this.triggerRedraw();
     }
 
+    // P3-5：日志条数上限，避免长局 DOM 膨胀
+    static get MAX_LOGS() { return 200; }
+
     log(msg, type) {
         const div = document.createElement('div');
         div.className = `log-entry log-${type}`;
         div.innerText = `[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] ${msg}`;
         const container = document.getElementById('log-container');
         container.prepend(div);
+        // 超出上限时移除最旧的条目
+        while (container.children.length > Game.MAX_LOGS) {
+            container.removeChild(container.lastChild);
+        }
     }
 
     updateUI() {
@@ -163,7 +173,10 @@ class Game {
 
     animate() {
         this.draw();
-        requestAnimationFrame(() => this.animate());
+        // P3-1：静止时无需空转 rAF；只有动画进行中或需要重绘时才调度下一帧
+        if (!this.renderer.isIdle(this.state.board)) {
+            requestAnimationFrame(() => this.animate());
+        }
     }
 
     executeMove(p, tr, tc) {
@@ -223,6 +236,61 @@ class Game {
             const pName = this.personality === 'aggressive' ? CONFIG.UI_TEXT.aggressive : CONFIG.UI_TEXT.conservative;
             this.log(CONFIG.UI_TEXT.aiSwitch(pName), "system");
         };
+
+        // P3-6：键盘操作支持
+        document.addEventListener('keydown', (e) => this.handleKeyboard(e));
+    }
+
+    /**
+     * P3-6：键盘操作
+     *   ↑↓←→  移动选中棋子预览（不实际走子）
+     *   Enter 确认走子
+     *   Esc   取消选中
+     */
+    handleKeyboard(e) {
+        if (this.state.gameOver || this.isThinking) return;
+        const sel = this.state.selected;
+        switch (e.key) {
+            case 'Escape':
+                if (sel) {
+                    this.state.selected = null;
+                    this.triggerRedraw();
+                }
+                break;
+            case 'Enter':
+                if (sel) {
+                    // 尝试朝某个方向走（用最后一次键盘方向，存于 _kbdDir）
+                    if (this._kbdDir) {
+                        const [dr, dc] = this._kbdDir;
+                        const tr = sel.r + dr, tc = sel.c + dc;
+                        if (this.canMove(sel, tr, tc)) {
+                            this.executeMove(sel, tr, tc);
+                        }
+                    }
+                }
+                break;
+            case 'ArrowUp':    case 'w': case 'W': this._kbdDir = [-1, 0]; this.previewMove(sel); break;
+            case 'ArrowDown':  case 's': case 'S': this._kbdDir = [1,  0]; this.previewMove(sel); break;
+            case 'ArrowLeft':  case 'a': case 'A': this._kbdDir = [0, -1]; this.previewMove(sel); break;
+            case 'ArrowRight': case 'd': case 'D': this._kbdDir = [0,  1]; this.previewMove(sel); break;
+            default: return;
+        }
+        e.preventDefault();
+    }
+
+    /**
+     * P3-6：键盘预览 - 高亮可走的格子（通过短暂切换 selected 实现）
+     */
+    previewMove(sel) {
+        if (!sel || !this._kbdDir) return;
+        const [dr, dc] = this._kbdDir;
+        const tr = sel.r + dr, tc = sel.c + dc;
+        if (this.canMove(sel, tr, tc)) {
+            // 临时把目标格设为「选中」的视觉反馈（通过 highlightBoard 高亮合法目标）
+            this._highlightTarget = { r: tr, c: tc };
+            this.triggerRedraw();
+            setTimeout(() => { this._highlightTarget = null; this.triggerRedraw(); }, 400);
+        }
     }
 
     setActiveBtn(target) {

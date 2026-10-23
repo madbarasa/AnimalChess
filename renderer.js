@@ -28,12 +28,33 @@
             this.cols = config.BOARD.cols;
             this.ctx = canvas.getContext('2d');
 
-            // 物理像素尺寸（P3-3 会在此基础上乘 devicePixelRatio）
-            this.canvas.width = this.cols * this.cell;
-            this.canvas.height = this.rows * this.cell;
+            // 画布尺寸（P3-3 DPR 适配在 game.js 中调用 adjustSize()）
+            this.cssWidth = this.cols * this.cell;
+            this.cssHeight = this.rows * this.cell;
+            this.canvas.width = this.cssWidth;
+            this.canvas.height = this.cssHeight;
 
-            this.pulse = 0;
             this.needsRedraw = true;
+        }
+
+        /**
+         * P3-3：按 devicePixelRatio 缩放画布，高分屏清晰。
+         * 应在 Game 初始化后调用一次。
+         */
+        adjustSize() {
+            const dpr = window.devicePixelRatio || 1;
+            this.canvas.style.width = this.cssWidth + 'px';
+            this.canvas.style.height = this.cssHeight + 'px';
+            this.canvas.width = Math.round(this.cssWidth * dpr);
+            this.canvas.height = Math.round(this.cssHeight * dpr);
+            this.ctx.scale(dpr, dpr);
+        }
+
+        /**
+         * P3-1：当无棋子插值移动且无需重绘时可暂停 rAF 循环。
+         */
+        isIdle(board) {
+            return !this.needsRedraw && !this.isAnimating(board);
         }
 
         requestRedraw() {
@@ -57,24 +78,25 @@
             const rules = this.config.RULES;
             const cell = this.cell;
 
-            this.pulse = (this.pulse + 0.05) % (Math.PI * 2);
+            // P3-1/P3-2：河道与兽穴呼吸动画改用 CSS @keyframes（#river-pulse / #den-pulse），
+            // canvas 只负责绘制静态网格 + 棋子插值，不再每帧计算 pulse。
             if (!this.needsRedraw && !this.isAnimating(board)) return;
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // 清除画布（逻辑像素坐标系，已由 adjustSize 设置 scale）
+            ctx.clearRect(0, 0, this.cssWidth, this.cssHeight);
             ctx.strokeStyle = 'rgba(0, 242, 254, 0.03)';
             for (let i = 0; i <= this.cols; i++) {
-                ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, canvas.height); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, this.cssHeight); ctx.stroke();
             }
             for (let i = 0; i <= this.rows; i++) {
-                ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(canvas.width, i * cell); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(this.cssWidth, i * cell); ctx.stroke();
             }
 
+            // 河道底色（静态，不做脉冲；脉冲效果由 CSS #river-pulse 层叠加）
             rules.rivers.forEach(([r, c]) => {
                 const x = c * cell, y = r * cell;
-                ctx.fillStyle = 'rgba(0, 242, 254, 0.08)';
+                ctx.fillStyle = 'rgba(0, 242, 254, 0.06)';
                 ctx.fillRect(x + 2, y + 2, cell - 4, cell - 4);
-                ctx.strokeStyle = `rgba(0, 242, 254, ${0.15 + Math.sin(this.pulse) * 0.05})`;
-                ctx.strokeRect(x + 4, y + 4, cell - 8, cell - 8);
             });
 
             rules.traps.forEach((t) => {
@@ -85,17 +107,19 @@
                 ctx.setLineDash([]);
             });
 
+            // 兽穴用 canvas 绘制（CSS 只做脉冲光晕，图形本体仍需 canvas）
             rules.dens.forEach((d) => {
                 const x = d.c * cell + cell / 2, y = d.r * cell + cell / 2;
                 const color = d.side === 'red' ? '#ff4d4d' : '#00f2fe';
                 ctx.beginPath();
-                ctx.arc(x, y, 20 + Math.sin(this.pulse) * 4, 0, Math.PI * 2);
-                ctx.strokeStyle = color;
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.arc(x, y, 12, 0, Math.PI * 2);
+                ctx.arc(x, y, 14, 0, Math.PI * 2);
                 ctx.fillStyle = color;
+                ctx.globalAlpha = 0.35;
                 ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
             });
 
             board.flat().forEach((p) => {
@@ -113,6 +137,15 @@
                     ctx.stroke();
                 }
 
+                // P3-6：键盘预览高亮目标格
+                if (this._highlightTarget && p.r === this._highlightTarget.r && p.c === this._highlightTarget.c) {
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, cell / 2 - 2, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(57, 255, 20, 0.8)';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+
                 ctx.fillStyle = '#111322';
                 ctx.beginPath();
                 ctx.roundRect(p.x + 10, p.y + 10, cell - 20, cell - 20, 15);
@@ -127,7 +160,7 @@
                 ctx.fillText(p.name, centerX, centerY + 7);
             });
 
-            if (!this.isAnimating(board)) this.needsRedraw = false;
+            this.needsRedraw = !this.isAnimating(board);
         }
     }
 

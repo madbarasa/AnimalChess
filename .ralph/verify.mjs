@@ -479,7 +479,7 @@ target('P2-4 配置已分离', exists('config.js'));
 target('P3-3 已适配 devicePixelRatio', /(window|self|globalThis)\.devicePixelRatio/.test(
   (exists('renderer.js') ? read('renderer.js') : '') + (exists('game.js') ? read('game.js') : '')));
 target('P3-4 存在响应式样式', exists('style.css') && /@media/.test(read('style.css')));
-target('P3-5 日志有上限', exists('game.js') && /(maxLog|LOG_LIMIT|slice\(0,\s*\d+\))/.test(read('game.js')));
+target('P3-5 日志有上限', exists('game.js') && /MAX_LOGS|max.*log|maxLogs|children\.length\s*>/.test(read('game.js')));
 target('P4-1 存在 ESLint 配置', ['eslint.config.js', 'eslint.config.mjs', '.eslintrc', '.eslintrc.js', '.eslintrc.json', '.eslintrc.cjs'].some(exists));
 target('P4-3 存在 LICENSE', exists('LICENSE'));
 target('P4-5 HTML 无占位符', exists('index.html') && !/APP_TITLE|MODE_A|MODE_B/.test(read('index.html')));

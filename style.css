@@ -221,3 +221,62 @@ canvas {
 .hidden {
     display: none !important;
 }
+
+/* ============================================================
+   P3-2：河道/兽穴 CSS 脉冲动画（独立于 canvas rAF，空闲时也连续）
+   ============================================================ */
+@keyframes river-pulse {
+    0%, 100% { opacity: 0.5; box-shadow: inset 0 0 8px rgba(0, 242, 254, 0.15); }
+    50%       { opacity: 1;   box-shadow: inset 0 0 18px rgba(0, 242, 254, 0.45); }
+}
+
+@keyframes den-pulse {
+    0%, 100% { opacity: 0.6; transform: scale(0.95); }
+    50%       { opacity: 1;   transform: scale(1.05); }
+}
+
+#river-pulse {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 242, 254, 0.06) 100%);
+    pointer-events: none;
+    animation: river-pulse 3s ease-in-out infinite;
+}
+
+/* 兽穴光晕（两个，分别定位到蓝/红兽穴格） */
+.den-glow {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: den-pulse 2.4s ease-in-out infinite;
+}
+.den-glow.blue  { background: radial-gradient(circle, rgba(0,242,254,0.35) 0%, transparent 70%); border: 2px solid rgba(0,242,254,0.5); }
+.den-glow.red   { background: radial-gradient(circle, rgba(255,77,77,0.35)  0%, transparent 70%); border: 2px solid rgba(255,77,77,0.5); }
+
+/* P3-4：响应式 —— 窄屏棋盘缩放、面板换行 */
+@media (max-width: 960px) {
+    #app {
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 16px;
+    }
+    .panel {
+        width: 100%;
+        max-width: 560px;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    .status-card { flex: 1; min-width: 160px; }
+    #log-container { flex: 2; min-height: 120px; max-height: 160px; }
+}
+
+@media (max-width: 600px) {
+    body { align-items: flex-start; overflow-y: auto; }
+    #app { width: 100%; border-radius: 0; }
+    .panel { max-width: 100%; }
+    #canvas-wrapper { width: 100%; }
+    #canvas-wrapper canvas { width: 100% !important; height: auto !important; }
+}

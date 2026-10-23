@@ -30,8 +30,14 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
+          # 只发布运行时静态资源，排除 .github/.ralph/.eslintrc 等元数据
           path: '.'
+          exclusion_patterns: >-
+            .github
+            .ralph
+            .eslintrc.json
+            CODE_REVIEW.md
+            *.md
       
       - name: Deploy to GitHub Pages
         id: deployment
