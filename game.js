@@ -172,7 +172,8 @@ function ai_exitSbe(map, ply, aiturn) {
     if (blueCount === 0) return 5000 * ply * neg;
     if (redCount === 0) return -5000 * ply * neg;
 
-    // 陷阱防御判定
+    // 陷阱防御判定（红蓝对称）
+    // 己方棋子站在「对方陷阱」里且相邻敌子、又轮到对方走棋时，下一步必被吃，直接判为劣势。
     for (const blue of blueAnims) {
         if (map[blue.point.x][blue.point.y].trap === 1) {
             let safe = true;
@@ -180,6 +181,15 @@ function ai_exitSbe(map, ply, aiturn) {
                 if (Math.abs(blue.point.x - red.point.x) + Math.abs(blue.point.y - red.point.y) <= 1) { safe = false; break; }
             }
             if (!safe && !blueTurn) return -1000 * ply * neg;
+        }
+    }
+    for (const red of redAnims) {
+        if (map[red.point.x][red.point.y].trap === 0) {
+            let safe = true;
+            for (const blue of blueAnims) {
+                if (Math.abs(red.point.x - blue.point.x) + Math.abs(red.point.y - blue.point.y) <= 1) { safe = false; break; }
+            }
+            if (!safe && blueTurn) return 1000 * ply * neg;
         }
     }
     return null;
