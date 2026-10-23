@@ -261,10 +261,12 @@ let isTimeUp = false;
 let bestDecisionGlobal = null;
 
 // Alpha-Beta 剪枝深度搜索
+// 超时中断约定：返回 null 表示「本层结果不完整」，调用方必须整条分支作废，
+// 绝不能把中断值当成真实评估参与 alpha/beta 比较。
 function alphaBetaPruning(map, ply, alpha, beta, aiturn, maxPly, startTime, maxTime) {
     if (Date.now() - startTime >= maxTime) {
         isTimeUp = true;
-        return 0;
+        return null;
     }
 
     const isExit = ai_exitSbe(map, ply, aiturn);
@@ -306,7 +308,8 @@ function alphaBetaPruning(map, ply, alpha, beta, aiturn, maxPly, startTime, maxT
         movingAnimal.point.x = x1;
         movingAnimal.point.y = y1;
 
-        if (isTimeUp) return 0;
+        // 子节点被超时中断：本层结果不完整，整条分支作废并继续向上冒泡
+        if (isTimeUp || res === null) return null;
 
         if (aiturn) {
             if (res > bestVal) {
@@ -325,6 +328,23 @@ function alphaBetaPruning(map, ply, alpha, beta, aiturn, maxPly, startTime, maxT
     return bestVal;
 }
 
+// 兜底：搜索被中断且没有任何「完整层」结果时，至少给出一个合法走法，
+// 避免 Workers 返回 null 让主线程卡在「思考中」。
+function pickFallbackDecision(map) {
+    for (let x1 = 0; x1 < 7; x1++) {
+        for (let y1 = 0; y1 < 9; y1++) {
+            const cell = map[x1][y1];
+            if (!cell.animal || cell.animal.color !== 0) continue; // 0 = 蓝方 = AI
+            const moves = getOrderedMoves(map, cell.animal);
+            if (moves.length > 0) {
+                const m = moves[0];
+                return { x1: m.x1, y1: m.y1, x2: m.x2, y2: m.y2 };
+            }
+        }
+    }
+    return null; // 真的无子可动，交由主线程判和
+}
+
 // 接收 Worker 消息
 onmessage = function(e) {
     const { map, personality, maxTime = 1500 } = e.data;
@@ -337,10 +357,12 @@ onmessage = function(e) {
     // 迭代加深搜索
     for (let depth = 1; depth <= maxDepth; depth++) {
         bestDecisionGlobal = null;
-        alphaBetaPruning(map, depth, -Infinity, Infinity, true, depth, startTime, maxTime);
+        const searchValue = alphaBetaPruning(map, depth, -Infinity, Infinity, true, depth, startTime, maxTime);
         
-        if (isTimeUp && depth > 1) {
-            break; 
+        // 本层被超时中断：结果不完整，直接丢弃该层，
+        // finalDecision 保留上一层搜索完成的完整结果。
+        if (isTimeUp || searchValue === null) {
+            break;
         }
         
         if (bestDecisionGlobal) {
@@ -350,6 +372,11 @@ onmessage = function(e) {
         if (Date.now() - startTime >= maxTime * 0.8) {
             break;
         }
+    }
+
+    // 一层都没跑完（极端超时）时退回合法走法，保证 AI 一定有响应
+    if (!finalDecision) {
+        finalDecision = pickFallbackDecision(map);
     }
 
     postMessage({ point: finalDecision });

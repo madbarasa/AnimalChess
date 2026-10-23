@@ -121,11 +121,12 @@ try {
   const fn = new Function('postMessage', 'let onmessage;' + buildEvalSource(code) + '; return onmessage;');
   let out = null;
   const handler = fn((msg) => (out = msg));
-  const t0 = Date.now();
-  handler({ data: { map: toAiMap(buildBoard(
+  const initialMap = () => toAiMap(buildBoard(
     [[0,0,8],[0,6,7],[0,4,6],[2,4,5],[2,2,4],[2,6,3],[1,5,2],[2,0,1]],
     [[8,6,8],[8,0,7],[8,2,6],[6,2,5],[6,4,4],[6,0,3],[7,1,2],[6,6,1]]
-  )), personality: 'aggressive', maxTime: 1500 } });
+  ));
+  const t0 = Date.now();
+  handler({ data: { map: initialMap(), personality: 'aggressive', maxTime: 1500 } });
   const ms = Date.now() - t0;
   must(`AI 开局返回走法（${ms}ms）`, !!(out && out.point), JSON.stringify(out));
   if (out && out.point) {
@@ -133,6 +134,18 @@ try {
     const inBoard = [x1, x2].every((v) => v >= 0 && v < COLS) && [y1, y2].every((v) => v >= 0 && v < ROWS);
     must('AI 走法坐标在棋盘内', inBoard, JSON.stringify(out.point));
     must('AI 走法为真实位移', x1 !== x2 || y1 !== y2, JSON.stringify(out.point));
+  }
+
+  // P1-3 回归：搜索被超时中断（maxTime=0）时也不能返回 null / 非法坐标。
+  // 旧实现超时 return 0 会污染搜索值；新实现应丢弃不完整层并走合法兜底。
+  out = null;
+  handler({ data: { map: initialMap(), personality: 'aggressive', maxTime: 0 } });
+  must('P1-3 超时中断仍返回合法走法', !!(out && out.point), JSON.stringify(out));
+  if (out && out.point) {
+    const { x1, y1, x2, y2 } = out.point;
+    const inBoard = [x1, x2].every((v) => v >= 0 && v < COLS) && [y1, y2].every((v) => v >= 0 && v < ROWS);
+    must('P1-3 超时兜底坐标在棋盘内', inBoard, JSON.stringify(out.point));
+    must('P1-3 超时兜底为真实位移', x1 !== x2 || y1 !== y2, JSON.stringify(out.point));
   }
   worker = true;
 } catch (e) {
