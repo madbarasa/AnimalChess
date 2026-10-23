@@ -97,11 +97,35 @@ class Game {
         const pName = this.personality === 'aggressive' ? CONFIG.UI_TEXT.aggressive : CONFIG.UI_TEXT.conservative;
         this.log(CONFIG.UI_TEXT.enterMode(pName, CONFIG.VERSION), "system");
         this.updateUI();
+        this.updateRoster();
+        this.startTimer();
         this.triggerRedraw();
     }
 
     // P3-5：日志条数上限，避免长局 DOM 膨胀
     static get MAX_LOGS() { return 200; }
+
+    // 计时器：定期刷新用时显示（终局停止）
+    startTimer() {
+        if (this._timerInt) return;
+        this._timerInt = setInterval(() => {
+            if (this.state.gameOver) {
+                clearInterval(this._timerInt);
+                this._timerInt = null;
+                return;
+            }
+            const el = document.getElementById('timer-display');
+            if (el) el.innerText = this.elapsedText().replace('用时: ', '');
+        }, 500);
+    }
+
+    // 双方兵力徽章（吃子后实时同步）
+    updateRoster() {
+        const red = document.getElementById('red-count');
+        const blue = document.getElementById('blue-count');
+        if (red) red.innerText = String(this.countPieces(this.state.board, 'red'));
+        if (blue) blue.innerText = String(this.countPieces(this.state.board, 'blue'));
+    }
 
     log(msg, type) {
         const div = document.createElement('div');
@@ -191,6 +215,7 @@ class Game {
 
         this.isThinking = false;
         this.updateUI();
+        this.updateRoster();
         this.triggerRedraw();
 
         if (result.draw) return this.drawGame(result.draw);
@@ -311,6 +336,14 @@ class Game {
         return CONFIG.UI_TEXT.timeTaken(mins, secs);
     }
 
+    // 终局弹窗里的双方兵力徽章
+    fillVictoryRoster() {
+        const vRed = document.getElementById('v-red-count');
+        const vBlue = document.getElementById('v-blue-count');
+        if (vRed) vRed.innerText = String(this.countPieces(this.state.board, 'red'));
+        if (vBlue) vBlue.innerText = String(this.countPieces(this.state.board, 'blue'));
+    }
+
     win(side) {
         this.state.gameOver = true;
         this.isThinking = false;
@@ -321,13 +354,14 @@ class Game {
         const time = document.getElementById('victory-time');
 
         title.innerText = CONFIG.UI_TEXT.victoryTitle;
-        title.style.background = side === 'red' ? "linear-gradient(to bottom, #ff4d4d, #aa0000)" : "linear-gradient(to bottom, #00f2fe, #0055ff)";
+        title.style.background = side === 'red' ? "linear-gradient(to bottom, #ff8a7a, #ff4d4d)" : "linear-gradient(to bottom, #7fdcff, #35c8f5)";
         title.style.webkitBackgroundClip = "text";
 
         const sideText = side === 'red' ? CONFIG.UI_TEXT.redSide : CONFIG.UI_TEXT.blueSide;
         msg.innerText = CONFIG.UI_TEXT.victory(sideText);
         msg.style.color = side === 'red' ? "var(--neon-red)" : "var(--neon-blue)";
         time.innerText = this.elapsedText();
+        this.fillVictoryRoster();
 
         overlay.classList.remove('hidden');
         this.log(CONFIG.UI_TEXT.gameEnd(sideText), 'system');
@@ -353,6 +387,7 @@ class Game {
         msg.innerText = CONFIG.UI_TEXT.drawReason(sideText);
         msg.style.color = "var(--neon-green)";
         time.innerText = this.elapsedText();
+        this.fillVictoryRoster();
 
         overlay.classList.remove('hidden');
         this.log(CONFIG.UI_TEXT.drawLog(sideText), 'system');

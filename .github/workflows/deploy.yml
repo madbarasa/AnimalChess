@@ -23,22 +23,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
-      
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # 只发布运行时静态资源，排除 .github/.ralph/.eslintrc 等元数据
-          path: '.'
-          exclusion_patterns: >-
-            .github
-            .ralph
-            .eslintrc.json
-            CODE_REVIEW.md
-            *.md
-      
+          # 游戏运行时静态资源全部在 animal-chess/，直接发布该目录
+          path: 'animal-chess'
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

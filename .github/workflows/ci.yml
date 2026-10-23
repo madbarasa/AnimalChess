@@ -15,15 +15,18 @@ jobs:
 
     - name: Install pnpm
       uses: pnpm/action-setup@v4
+      with:
+        package_json_file: other/package.json
 
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
         node-version: 24
         cache: 'pnpm'
+        cache-dependency-path: other/pnpm-lock.yaml
 
     - name: Install dependencies
-      run: pnpm install
+      run: pnpm install --dir other
 
     - name: Run linter
-      run: pnpm run lint
+      run: pnpm --dir other exec eslint --no-eslintrc -c .eslintrc.json ../animal-chess

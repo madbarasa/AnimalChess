@@ -1,0 +1,448 @@
+:root {
+    --neon-red: #ff6b5e;
+    --neon-blue: #35c8f5;
+    --neon-green: #5dff6a;
+    --neon-gold: #ffd166;
+    --board-land: #171b30;
+    --board-land-2: #1f2542;
+    --board-line: #3d4a7d;
+    --river-base: #0b5878;
+    --river-bright: #3fd2ff;
+    --panel-bg: #141a30;
+    --card-bg: #1d2542;
+    --card-border: #35406e;
+    --text-main: #d8e0ff;
+    --text-dim: #8a95c4;
+    --board-shadow: 0 0 60px rgba(53, 200, 245, 0.12);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background:
+        radial-gradient(1200px 600px at 20% -10%, #23305e 0%, transparent 60%),
+        radial-gradient(1000px 700px at 110% 110%, #1b2b52 0%, transparent 55%),
+        #0e1226;
+    color: var(--text-main);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#app {
+    display: flex;
+    gap: 25px;
+    padding: 30px;
+    background: var(--panel-bg);
+    border-radius: 30px;
+    border: 2px solid var(--card-border);
+    box-shadow: var(--board-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition: transform 0.1s;
+}
+
+/* PANEL STYLES */
+.panel {
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.status-card {
+    background: var(--card-bg);
+    border-radius: 20px;
+    padding: 20px;
+    border: 1px solid var(--card-border);
+}
+
+#turn-display {
+    font-size: 30px;
+    font-weight: 900;
+    text-align: center;
+    letter-spacing: 2px;
+    margin-bottom: 14px;
+    text-shadow: 0 0 18px rgba(53, 200, 245, 0.35);
+}
+
+.timer-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.timer-label {
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+}
+
+.timer-value {
+    font-size: 20px;
+    font-weight: 700;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-main);
+    background: #10142a;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 4px 14px;
+    min-width: 78px;
+    text-align: center;
+}
+
+.roster-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.roster-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #10142a;
+    border: 1px solid var(--card-border);
+}
+
+.roster-box b {
+    font-size: 18px;
+}
+
+.roster-box span {
+    font-size: 26px;
+    font-weight: 900;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-variant-numeric: tabular-nums;
+    min-width: 30px;
+    text-align: center;
+}
+
+.roster-box.red { border-left: 3px solid var(--neon-red); }
+.roster-box.red b { color: var(--neon-red); }
+.roster-box.red span { color: var(--neon-red); }
+
+.roster-box.blue { border-right: 3px solid var(--neon-blue); }
+.roster-box.blue b { color: var(--neon-blue); }
+.roster-box.blue span { color: var(--neon-blue); }
+
+.roster-vs {
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+}
+
+.btn-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+button {
+    padding: 14px;
+    background: #242e54;
+    border: 1px solid #3a4680;
+    color: var(--text-main);
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 15px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:hover {
+    background: #2e3a68;
+    color: white;
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 14px rgba(53, 200, 245, 0.25);
+}
+
+button:active {
+    transform: scale(0.97);
+}
+
+button:focus-visible {
+    outline: 2px solid var(--neon-blue);
+    outline-offset: 2px;
+}
+
+button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+button.active {
+    border-color: var(--neon-green);
+    color: var(--neon-green);
+    background: rgba(93, 255, 106, 0.1);
+}
+
+#log-container {
+    flex: 1;
+    background: #10142a;
+    border-radius: 15px;
+    padding: 15px;
+    font-size: 13px;
+    overflow-y: auto;
+    border: 1px solid var(--card-border);
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.log-entry {
+    margin-bottom: 10px;
+    border-left: 3px solid #3a4680;
+    padding-left: 12px;
+    color: var(--text-dim);
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.log-red { border-color: var(--neon-red); color: #ffb0a3; }
+.log-blue { border-color: var(--neon-blue); color: #a5e6ff; }
+.log-system { border-color: var(--neon-gold); color: var(--neon-gold); }
+
+#canvas-wrapper {
+    position: relative;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: var(--board-shadow), inset 0 0 30px rgba(0, 0, 0, 0.45);
+    border: 3px solid var(--card-border);
+    background: var(--board-land);
+}
+
+canvas {
+    display: block;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0) rotate(0); }
+    25% { transform: translateX(-8px) rotate(-1deg); }
+    75% { transform: translateX(8px) rotate(1deg); }
+}
+
+.shake {
+    animation: shake 0.2s ease-in-out 2;
+}
+
+/* VICTORY OVERLAY STYLES */
+#victory-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(10, 14, 32, 0.85);
+    backdrop-filter: blur(15px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+}
+
+#victory-overlay:not(.hidden) {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.victory-card {
+    background: linear-gradient(135deg, #1d2542 0%, #10142a 100%);
+    padding: 60px 80px;
+    border-radius: 40px;
+    border: 2px solid var(--neon-blue);
+    box-shadow: 0 0 80px rgba(53, 200, 245, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    text-align: center;
+    transform: scale(0.8);
+    transition: transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+#victory-overlay:not(.hidden) .victory-card {
+    transform: scale(1);
+}
+
+#victory-title {
+    font-size: 72px;
+    font-weight: 900;
+    margin: 0;
+    background: linear-gradient(to bottom, #ffffff, #9db1ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 30px rgba(157, 177, 255, 0.5);
+    letter-spacing: 10px;
+}
+
+#victory-msg {
+    font-size: 24px;
+    color: var(--neon-blue);
+    margin: 20px 0 40px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.victory-stats {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 30px;
+    font-size: 18px;
+    color: var(--text-dim);
+}
+
+.victory-stats #victory-time {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-main);
+    background: #10142a;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 6px 16px;
+    min-width: 90px;
+    text-align: center;
+}
+
+#btn-restart-win {
+    background: var(--neon-blue);
+    color: #081420;
+    border: none;
+    padding: 18px 50px;
+    font-size: 20px;
+    border-radius: 100px;
+    box-shadow: 0 0 30px rgba(53, 200, 245, 0.55);
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+#btn-restart-win:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 50px rgba(53, 200, 245, 0.8);
+}
+
+#btn-restart-win:active {
+    transform: scale(0.98);
+}
+
+/* P3-6：键盘操作提示条 */
+.kbd-hint {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 10px 14px;
+    margin: 0 20px 20px;
+    background: #10142a;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+}
+
+.kbd-hint span {
+    font-size: 11px;
+    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.kbd-hint kbd {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 10px;
+    background: #242e54;
+    border: 1px solid #3a4680;
+    border-radius: 4px;
+    padding: 1px 6px;
+    color: var(--text-main);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ============================================================
+   P3-2：河道/兽穴 CSS 脉冲动画（独立于 canvas rAF，空闲时也连续）
+   ============================================================ */
+@keyframes river-pulse {
+    0%, 100% { opacity: 0.45; }
+    50%       { opacity: 0.95; }
+}
+
+@keyframes den-pulse {
+    0%, 100% { opacity: 0.6; transform: scale(0.95); }
+    50%       { opacity: 1;   transform: scale(1.05); }
+}
+
+#river-pulse {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(53, 200, 245, 0.12) 100%);
+    pointer-events: none;
+    animation: river-pulse 3s ease-in-out infinite;
+}
+
+/* 兽穴光晕（两个，分别定位到蓝/红兽穴格） */
+.den-glow {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: den-pulse 2.4s ease-in-out infinite;
+}
+.den-glow.blue  { background: radial-gradient(circle, rgba(53,200,245,0.4) 0%, transparent 70%); border: 2px solid rgba(53,200,245,0.6); }
+.den-glow.red   { background: radial-gradient(circle, rgba(255,107,94,0.4)  0%, transparent 70%); border: 2px solid rgba(255,107,94,0.6); }
+
+/* P3-4：响应式 —— 窄屏棋盘缩放、面板换行 */
+@media (max-width: 960px) {
+    #app {
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 16px;
+    }
+    .panel {
+        width: 100%;
+        max-width: 560px;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    .status-card { flex: 1 1 100%; }
+    #log-container { flex: 2; min-height: 120px; max-height: 160px; }
+}
+
+@media (max-width: 600px) {
+    body { align-items: flex-start; overflow-y: auto; padding: 12px; }
+    #app { width: 100%; border-radius: 0; padding: 12px; }
+    .panel { max-width: 100%; }
+    .btn-group { grid-template-columns: 1fr; }
+    .roster-row { flex-direction: column; align-items: stretch; }
+    .roster-vs { display: none; }
+    .roster-box.red { border-left: 3px solid var(--neon-red); border-right: 1px solid var(--card-border); }
+    .roster-box.blue { border-left: 3px solid var(--neon-blue); }
+    #canvas-wrapper { width: 100%; }
+    #canvas-wrapper canvas { width: 100% !important; height: auto !important; }
+    #turn-display { font-size: 24px; }
+    .timer-value { font-size: 16px; min-width: 64px; }
+    .victory-card { padding: 40px 24px; }
+    #victory-title { font-size: 48px; letter-spacing: 6px; }
+    button { min-height: 44px; }
+}

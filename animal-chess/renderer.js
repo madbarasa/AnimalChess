@@ -84,27 +84,66 @@
 
             // 清除画布（逻辑像素坐标系，已由 adjustSize 设置 scale）
             ctx.clearRect(0, 0, this.cssWidth, this.cssHeight);
-            ctx.strokeStyle = 'rgba(0, 242, 254, 0.03)';
+
+            // 陆地底色
+            ctx.fillStyle = '#171b30';
+            ctx.fillRect(0, 0, this.cssWidth, this.cssHeight);
+
+            // 陆地格交替棋盘纹，提升可读性
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.028)';
+            for (let r = 0; r < this.rows; r++) {
+                for (let c = 0; c < this.cols; c++) {
+                    if ((r + c) % 2 === 0) {
+                        ctx.fillRect(c * cell, r * cell, cell, cell);
+                    }
+                }
+            }
+
+            // 网格线：清晰可读，外框加粗
+            ctx.strokeStyle = 'rgba(122, 143, 214, 0.42)';
+            ctx.lineWidth = 1;
             for (let i = 0; i <= this.cols; i++) {
                 ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, this.cssHeight); ctx.stroke();
             }
             for (let i = 0; i <= this.rows; i++) {
                 ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(this.cssWidth, i * cell); ctx.stroke();
             }
+            ctx.strokeStyle = 'rgba(150, 170, 240, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(1, 1, this.cssWidth - 2, this.cssHeight - 2);
 
-            // 河道底色（静态填充）+ CSS #river-pulse 层叠加呼吸效果
+            // 河道底色（静态，不做脉冲；脉冲效果由 CSS #river-pulse 层叠加）
             rules.rivers.forEach(([r, c]) => {
                 const x = c * cell, y = r * cell;
-                ctx.fillStyle = 'rgba(0, 242, 254, 0.15)';
+                const g = ctx.createLinearGradient(x, y, x, y + cell);
+                g.addColorStop(0, 'rgba(28, 116, 158, 0.95)');
+                g.addColorStop(0.5, 'rgba(43, 158, 208, 0.95)');
+                g.addColorStop(1, 'rgba(28, 116, 158, 0.95)');
+                ctx.fillStyle = g;
                 ctx.fillRect(x + 2, y + 2, cell - 4, cell - 4);
-                ctx.strokeStyle = 'rgba(0, 242, 254, 0.25)';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(x + 3, y + 3, cell - 6, cell - 6);
+            });
+
+            // 河道波纹：细横线 + 高光，让水感明显
+            ctx.strokeStyle = 'rgba(170, 225, 255, 0.5)';
+            ctx.lineWidth = 1;
+            rules.rivers.forEach(([r, c]) => {
+                const x = c * cell, y = r * cell;
+                [0.3, 0.5, 0.7].forEach((f) => {
+                    const wy = y + cell * f;
+                    ctx.beginPath();
+                    ctx.moveTo(x + 10, wy);
+                    ctx.lineTo(x + cell - 10, wy);
+                    ctx.stroke();
+                });
             });
 
             rules.traps.forEach((t) => {
                 const x = t.c * cell, y = t.r * cell;
-                ctx.strokeStyle = t.side === 'red' ? 'rgba(255, 77, 77, 0.4)' : 'rgba(0, 242, 254, 0.4)';
+                const color = t.side === 'red' ? 'rgba(255, 107, 94, 0.9)' : 'rgba(53, 200, 245, 0.9)';
+                ctx.fillStyle = t.side === 'red' ? 'rgba(255, 107, 94, 0.12)' : 'rgba(53, 200, 245, 0.12)';
+                ctx.fillRect(x + 8, y + 8, cell - 16, cell - 16);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
                 ctx.setLineDash([5, 5]);
                 ctx.strokeRect(x + 10, y + 10, cell - 20, cell - 20);
                 ctx.setLineDash([]);
@@ -113,11 +152,11 @@
             // 兽穴用 canvas 绘制（CSS 只做脉冲光晕，图形本体仍需 canvas）
             rules.dens.forEach((d) => {
                 const x = d.c * cell + cell / 2, y = d.r * cell + cell / 2;
-                const color = d.side === 'red' ? '#ff4d4d' : '#00f2fe';
+                const color = d.side === 'red' ? '#ff6b5e' : '#35c8f5';
                 ctx.beginPath();
                 ctx.arc(x, y, 14, 0, Math.PI * 2);
                 ctx.fillStyle = color;
-                ctx.globalAlpha = 0.35;
+                ctx.globalAlpha = 0.55;
                 ctx.fill();
                 ctx.globalAlpha = 1;
                 ctx.strokeStyle = color;
@@ -129,7 +168,7 @@
                 if (!p) return;
                 p.x += (p.targetX - p.x) * 0.25;
                 p.y += (p.targetY - p.y) * 0.25;
-                const color = p.color === 'red' ? '#ff4d4d' : '#00f2fe';
+                const color = p.color === 'red' ? '#ff6b5e' : '#35c8f5';
                 const centerX = p.x + cell / 2, centerY = p.y + cell / 2;
 
                 if (selected === p) {
@@ -144,12 +183,15 @@
                 if (this._highlightTarget && p.r === this._highlightTarget.r && p.c === this._highlightTarget.c) {
                     ctx.beginPath();
                     ctx.arc(centerX, centerY, cell / 2 - 2, 0, Math.PI * 2);
-                    ctx.strokeStyle = 'rgba(57, 255, 20, 0.8)';
+                    ctx.strokeStyle = 'rgba(93, 255, 106, 0.85)';
                     ctx.lineWidth = 3;
                     ctx.stroke();
                 }
 
-                ctx.fillStyle = '#111322';
+                const bodyGrad = ctx.createLinearGradient(p.x, p.y, p.x, p.y + cell);
+                bodyGrad.addColorStop(0, '#2a3158');
+                bodyGrad.addColorStop(1, '#161a30');
+                ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
                 ctx.roundRect(p.x + 10, p.y + 10, cell - 20, cell - 20, 15);
                 ctx.fill();

@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import path from 'node:path';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'animal-chess');
 const read = (p) => readFileSync(path.join(root, p), 'utf8');
 const exists = (p) => existsSync(path.join(root, p));
 
