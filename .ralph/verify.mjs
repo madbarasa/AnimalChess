@@ -115,13 +115,23 @@ function toAiMap(board) {
   return aiMap;
 }
 
+// 统一用 vm 沙箱装载：模拟 self / postMessage，页面与 Worker 的加载顺序都按真实文件来
+function createSandbox(extra = {}) {
+  const sandbox = { console, ...extra };
+  sandbox.self = sandbox;
+  vm.createContext(sandbox);
+  return sandbox;
+}
+
 let worker = null;
 try {
   const { code, origin } = loadWorkerSource();
   console.log(`  \u2139 AI 源码来源：${origin}`);
-  const fn = new Function('postMessage', 'let onmessage;' + buildEvalSource(code) + '; return onmessage;');
   let out = null;
-  const handler = fn((msg) => (out = msg));
+  const sandbox = createSandbox({ postMessage: (msg) => (out = msg) });
+  vm.runInContext(buildEvalSource(code), sandbox);
+  const handler = sandbox.onmessage;
+  must('AI worker 暴露 onmessage', typeof handler === 'function');
   const initialMap = () => toAiMap(buildBoard(
     [[0,0,8],[0,6,7],[0,4,6],[2,4,5],[2,2,4],[2,6,3],[1,5,2],[2,0,1]],
     [[8,6,8],[8,0,7],[8,2,6],[6,2,5],[6,4,4],[6,0,3],[7,1,2],[6,6,1]]
@@ -135,6 +145,10 @@ try {
     const inBoard = [x1, x2].every((v) => v >= 0 && v < COLS) && [y1, y2].every((v) => v >= 0 && v < ROWS);
     must('AI 走法坐标在棋盘内', inBoard, JSON.stringify(out.point));
     must('AI 走法为真实位移', x1 !== x2 || y1 !== y2, JSON.stringify(out.point));
+    // P2-1：AI 的走法必须能通过主线程同一份规则校验
+    const rules = sandbox.AnimalChessRules;
+    must('P2-1 AI 走法通过 rules.canMove 校验',
+      !!(rules && rules.canMove(initialMap(), x1, y1, x2, y2)), JSON.stringify(out.point));
   }
 
   // P1-3 回归：搜索被超时中断（maxTime=0）时也不能返回 null / 非法坐标。
@@ -153,9 +167,62 @@ try {
   must('AI worker 可独立加载并运行', false, String(e.message || e).slice(0, 300));
 }
 
-console.log('\n=== MUST：终局判定（P1-6 回归） ===');
+console.log('\n=== MUST：规则唯一来源（P2-1） ===');
 
-// 在 vm 里加载 game.js，只用 Game.prototype 的纯逻辑方法，不触碰真实 DOM。
+try {
+  const rulesSandbox = createSandbox();
+  vm.runInContext(read('rules.js'), rulesSandbox);
+  const R = rulesSandbox.AnimalChessRules;
+  const isFn = (k) => R && typeof R[k] === 'function';
+  must('rules.js 导出 canEat / canMove / getLegalMovesFrom / getAllLegalMoves',
+    isFn('canEat') && isFn('canMove') && isFn('getLegalMovesFrom') && isFn('getAllLegalMoves'));
+
+  const eat = (a, f, trap = -1, from = 'land', to = 'land') =>
+    R.canEat({ rank: a, color: 0 }, f ? { rank: f, color: 1 } : null, trap, from, to);
+  must('P2-1 鼠吃象', eat(1, 8) === true);
+  must('P2-1 象不吃鼠', eat(8, 1) === false);
+  must('P2-1 等级低者不可捕食', eat(3, 7) === false);
+  must('P2-1 陷阱中的防守棋子等级视为 0', eat(3, 7, 0) === true);
+  must('P2-1 水中棋子不能攻击岸上', eat(1, 2, -1, 'water', 'land') === false);
+  must('P2-1 岸上鼠可吃水中鼠', eat(1, 1, -1, 'land', 'water') === true);
+
+  const move = (bPos, rPos, from, to) => {
+    const board = toAiMap(buildBoard(bPos, rPos));
+    return R.canMove(board, from[1], from[0], to[1], to[0]);
+  };
+  must('P2-1 鼠可进河', move([[2,1,1,'blue']], [], [2,1], [3,1]) === true);
+  must('P2-1 非鼠不可进河', move([[2,1,3,'blue']], [], [2,1], [3,1]) === false);
+  must('P2-1 岸上鼠可跨地形吃水中鼠', move([[2,1,1,'blue']], [[3,1,1,'red']], [2,1], [3,1]) === true);
+  must('P2-1 水中鼠不能吃岸上鼠', move([[3,1,1,'blue']], [[2,1,1,'red']], [3,1], [2,1]) === false);
+  must('P2-1 狮虎可跨河', move([[2,1,7,'blue']], [], [2,1], [6,1]) === true);
+  must('P2-1 跨河被河中棋子阻挡', move([[2,1,7,'blue']], [[4,1,1,'red']], [2,1], [6,1]) === false);
+  must('P2-1 跨河不能落在水里', move([[2,1,7,'blue']], [], [2,1], [5,1]) === false);
+  must('P2-1 不能进入己方兽穴', move([[1,3,1,'blue']], [], [1,3], [0,3]) === false);
+  must('P2-1 可以进入对方兽穴', move([[7,3,1,'blue']], [], [7,3], [8,3]) === true);
+
+  const initialRulesBoard = toAiMap(buildBoard(
+    [[0,0,8],[0,6,7],[0,4,6],[2,4,5],[2,2,4],[2,6,3],[1,5,2],[2,0,1]],
+    [[8,6,8],[8,0,7],[8,2,6],[6,2,5],[6,4,4],[6,0,3],[7,1,2],[6,6,1]]
+  ));
+  const blueMoves = R.getAllLegalMoves(initialRulesBoard, 0).length;
+  const redMoves = R.getAllLegalMoves(initialRulesBoard, 1).length;
+  must('P2-1 开局蓝方 22 步（与原实现一致）', blueMoves === 22, `实际 ${blueMoves}`);
+  must('P2-1 开局红方 22 步（与原实现一致）', redMoves === 22, `实际 ${redMoves}`);
+
+  const gameSrc = read('game.js');
+  must('P2-1 game.js 不再保留第二套 canEat', !/function\s+canEat\s*\(/.test(gameSrc));
+  must('P2-1 game.js 不再保留第二套 checkEat', !/checkEat/.test(gameSrc));
+  const html = read('index.html');
+  must('P2-1 index.html 先加载 rules.js 再加载 game.js',
+    /<script[^>]+src=["'][^"']*rules\.js/.test(html) && html.indexOf('rules.js') < html.indexOf('game.js'));
+} catch (e) {
+  must('P2-1 规则测试可运行', false, String(e.message || e).slice(0, 300));
+}
+
+
+console.log('\n=== MUST：终局判定（P1-6）与主线程规则一致性（P2-1） ===');
+
+// 在 vm 里加载 rules.js + game.js，只用 Game.prototype 的纯逻辑方法，不触碰真实 DOM。
 function makeHeadlessGame(Game) {
   const g = Object.create(Game.prototype);
   g.board = Array(ROWS).fill().map(() => Array(COLS).fill(null));
@@ -183,8 +250,10 @@ try {
   const gameSrc = read('game.js');
   const sandbox = { document: { addEventListener() {} } };
   vm.createContext(sandbox);
+  vm.runInContext(read('rules.js'), sandbox);
   vm.runInContext(gameSrc + '\n;globalThis.__Game = Game;', sandbox);
   const Game = sandbox.__Game;
+  const R = sandbox.AnimalChessRules;
 
   // 吃光对方最后一子 → 判负
   {
@@ -213,8 +282,39 @@ try {
     g.executeMove(g.add(1, 3, 7, 'red'), 0, 3);
     must('P1-6 进兽穴仍判胜', g._won === 'red', JSON.stringify({ won: g._won, drawn: g._drawn }));
   }
+
+  // P2-1 主线程与 rules.js 是同一实现：开局所有起点/终点逐一比对
+  {
+    const g = makeHeadlessGame(Game);
+    [[0,0,8],[0,6,7],[0,4,6],[2,4,5],[2,2,4],[2,6,3],[1,5,2],[2,0,1]]
+      .forEach(([r, c, rank]) => g.add(r, c, rank, 'blue'));
+    [[8,6,8],[8,0,7],[8,2,6],[6,2,5],[6,4,4],[6,0,3],[7,1,2],[6,6,1]]
+      .forEach(([r, c, rank]) => g.add(r, c, rank, 'red'));
+
+    const rulesBoard = g.getAiCompatibleMap();
+    let mismatches = 0;
+    for (let x1 = 0; x1 < COLS; x1++) {
+      for (let y1 = 0; y1 < ROWS; y1++) {
+        const p = g.board[y1][x1];
+        if (!p) continue;
+        for (let x2 = 0; x2 < COLS; x2++) {
+          for (let y2 = 0; y2 < ROWS; y2++) {
+            if (!!g.canMove(p, y2, x2) !== !!R.canMove(rulesBoard, x1, y1, x2, y2)) mismatches++;
+          }
+        }
+      }
+    }
+    must('P2-1 主线程 canMove 与 rules.canMove 开局全坐标一致', mismatches === 0, `不一致 ${mismatches} 处`);
+
+    const blueGame = g.getAllValidMoves('blue').length;
+    const redGame = g.getAllValidMoves('red').length;
+    must('P2-1 主线程 getAllValidMoves 与 rules 一致',
+      blueGame === R.getAllLegalMoves(rulesBoard, 0).length && redGame === R.getAllLegalMoves(rulesBoard, 1).length,
+      `游戏 ${blueGame}/${redGame}`);
+    must('P2-1 开局合法步数 22/22（回归基线）', blueGame === 22 && redGame === 22, `蓝 ${blueGame} / 红 ${redGame}`);
+  }
 } catch (e) {
-  must('P1-6 终局判定测试可运行', false, String(e.message || e).slice(0, 300));
+  must('P1-6 / P2-1 逻辑测试可运行', false, String(e.message || e).slice(0, 300));
 }
 
 console.log('\n=== TARGET：任务进度（不阻断提交）===');

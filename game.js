@@ -76,15 +76,11 @@ class Game {
         this.canvas.width = CONFIG.cols * CONFIG.cell;
         this.canvas.height = CONFIG.rows * CONFIG.cell;
 
+        // 规则源码由 rules.js 序列化注入（唯一实现来源，P2-1）
+        if (!window.AnimalChessRules) {
+            throw new Error('rules.js 未加载：请在 index.html 中先于 game.js 引入规则文件');
+        }
         const workerCode = `
-// 判定是否可以捕食
-function canEat(animal, foe, trap) {
-    if (trap === animal.color) return true; // 陷阱中的棋子等级为0，任何棋子皆可捕食
-    if (animal.rank === 1 && foe.rank === 8) return true; // 鼠吃象
-    if (animal.rank === 8 && foe.rank === 1) return false; // 象不吃鼠
-    return animal.rank >= foe.rank; // 正常等级判定
-}
-
 // 狮虎跨河机动性评分
 function ai_lionTigerMobility(animal) {
     let minDistance = 1000;
@@ -205,60 +201,23 @@ function ai_exitSbe(map, ply, aiturn) {
     return null;
 }
 
-// 获取启发式排序后的移动列表
+// 获取启发式排序后的移动列表：合法性完全来自 rules.js，这里只负责 AI 的排序打分
 function getOrderedMoves(map, animal) {
-    let possibleMoves = [];
-    const moves = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-    let x1 = animal.point.x;
-    let y1 = animal.point.y;
-    
-    for (const val of moves) {
-        let x2 = x1 + val[0];
-        let y2 = y1 + val[1];
-        let possible = false;
-        let score = 0;
-
-        if (x2 >= 0 && x2 <= 6 && y2 >= 0 && y2 <= 8) {
-            const foe = map[x2][y2].animal;
-            if (!foe) {
-                if (map[x2][y2].base !== -1) {
-                    if (map[x2][y2].base !== animal.color) {
-                        possible = true;
-                        score = 1000; // 进洞优先级最高
-                    }
-                } else if (map[x2][y2].terrain === 'land' || animal.rank === 1) {
-                    possible = true;
-                    if (y2 >= 3 && y2 <= 5) score += 5; // 抢占中心区域
-                } else if (animal.rank === 6 || animal.rank === 7) {
-                    // 狮虎跳河逻辑
-                    let valid = true;
-                    let tx = x2, ty = y2;
-                    while (map[tx][ty].terrain !== 'land') {
-                        if (map[tx][ty].animal) { valid = false; break; }
-                        tx += val[0]; ty += val[1];
-                        if (tx < 0 || tx > 6 || ty < 0 || ty > 8) { valid = false; break; }
-                    }
-                    if (valid) {
-                        const finalFoe = map[tx][ty].animal;
-                        if (!finalFoe || (canEat(animal, finalFoe, map[tx][ty].trap) && finalFoe.color !== animal.color)) {
-                            possible = true;
-                            x2 = tx; y2 = ty;
-                            if (finalFoe) score = 100 + finalFoe.rank * 10;
-                        }
-                    }
-                }
-            } else if (foe.color !== animal.color) {
-                // 捕食逻辑
-                if (canEat(animal, foe, map[x2][y2].trap) && (map[x1][y1].terrain === map[x2][y2].terrain)) {
-                    possible = true;
-                    score = 100 + foe.rank * 10;
-                }
+    const x1 = animal.point.x;
+    const y1 = animal.point.y;
+    return AnimalChessRules.getLegalMovesFrom(map, x1, y1)
+        .map(({ x2, y2 }) => {
+            const target = map[x2][y2];
+            let score = 0;
+            if (target.animal) score = 100 + target.animal.rank * 10; // 吃子优先
+            if (target.base !== -1 && target.base !== animal.color) {
+                score = 1000; // 进对方兽穴优先级最高
+            } else if (y2 >= 3 && y2 <= 5) {
+                score += 5; // 抢占中心区域
             }
-        }
-        if (possible) possibleMoves.push({ x1, y1, x2, y2, score });
-    }
-    possibleMoves.sort((a, b) => b.score - a.score);
-    return possibleMoves;
+            return { x1, y1, x2, y2, score };
+        })
+        .sort((a, b) => b.score - a.score);
 }
 
 // 搜索上下文：一次搜索的全部可变状态都收在这里，不再挂在 Worker 顶层。
@@ -395,7 +354,9 @@ onmessage = function(e) {
     postMessage({ point: finalDecision, requestId });
 }
 `;
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        // 规则源码 + AI 源码一起注入 Blob：Worker 内不再有第二套规则实现
+        const workerSource = AnimalChessRules.source + '\n' + workerCode;
+        const blob = new Blob([workerSource], { type: 'application/javascript' });
         this.aiWorker = new Worker(URL.createObjectURL(blob));
         
         this.aiWorker.onmessage = (e) => {
@@ -512,52 +473,10 @@ onmessage = function(e) {
 
     isRiver(r, c) { return CONFIG.rivers.some(rv => rv[0] === r && rv[1] === c); }
 
+    // 主线程不保存任何规则实现：一律委托 rules.js（P2-1）
+    // p 为主棋盘棋子（行列坐标），rules 使用列优先坐标（x=列, y=行）。
     canMove(p, tr, tc, board = this.board) {
-        if (tr < 0 || tr >= CONFIG.rows || tc < 0 || tc >= CONFIG.cols) return false;
-        const dr = tr - p.r, dc = tc - p.c, dist = Math.abs(dr) + Math.abs(dc);
-        const target = board[tr][tc];
-
-        if (target && target.color === p.color) return false;
-        const myDen = CONFIG.dens.find(d => d.side === p.color);
-        if (tr === myDen.r && tc === myDen.c) return false;
-
-        const targetInRiver = this.isRiver(tr, tc);
-
-        if ((p.rank === 7 || p.rank === 6) && !targetInRiver && dist > 1) {
-            if ((dr !== 0 && dc === 0) || (dc !== 0 && dr === 0)) {
-                const sr = Math.sign(dr), sc = Math.sign(dc);
-                let mr = p.r + sr, mc = p.c + sc;
-                let riverCount = 0;
-                while (mr !== tr || mc !== tc) {
-                    if (!this.isRiver(mr, mc)) return false;
-                    if (board[mr][mc]) return false;
-                    riverCount++;
-                    mr += sr; mc += sc;
-                }
-                return riverCount >= 1 && this.checkEat(p, target, tr, tc, board);
-            }
-        }
-
-        if (dist !== 1) return false;
-        if (targetInRiver && p.rank !== 1) return false;
-        return this.checkEat(p, target, tr, tc, board);
-    }
-
-    checkEat(p, target, tr, tc, board) {
-        if (!target) return true;
-        // 目标格位于「我方陷阱」时，落在陷阱中的防守棋子等级视为 0，任何棋子均可捕食
-        const targetInOwnTrap = CONFIG.traps.some(t => t.r === tr && t.c === tc && t.side === p.color);
-        if (targetInOwnTrap) return true;
-
-        const pInRiver = this.isRiver(p.r, p.c);
-        const targetInRiver = this.isRiver(tr, tc);
-
-        // 其他情况在水中不能攻击陆地
-        if (pInRiver && !targetInRiver) return false;
-
-        if (p.rank === 1 && target.rank === 8) return true;
-        if (p.rank === 8 && target.rank === 1) return false;
-        return p.rank >= target.rank;
+        return AnimalChessRules.canMove(this.getAiCompatibleMap(board), p.c, p.r, tc, tr);
     }
 
     // --- 冠军 AI 引擎系统 (Worker 异步重构版) ---
@@ -575,12 +494,14 @@ onmessage = function(e) {
         });
     }
 
-    getAiCompatibleMap() {
+    // 把主棋盘（行优先、棋子带颜色字符串）转成规则/AI 通用的列优先棋盘。
+    // 这个结构同时就是 rules.js 的输入，避免再写一套坐标换算之外的规则。
+    getAiCompatibleMap(board = this.board) {
         const aiMap = [];
         for (let x = 0; x < CONFIG.cols; x++) {
             aiMap[x] = [];
             for (let y = 0; y < CONFIG.rows; y++) {
-                const p = this.board[y][x];
+                const p = board[y][x];
                 aiMap[x][y] = {
                     animal: p ? {
                         rank: p.rank,
@@ -621,19 +542,15 @@ onmessage = function(e) {
         return nextBoard;
     }
 
+    // 合法走法同样来自 rules.js；这里只把列优先坐标映射回主棋盘棋子对象
     getAllValidMoves(color, board = this.board) {
-        let moves = [];
-        board.flat().forEach(p => {
-            if (p && p.color === color) {
-                const targets = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-                if (p.rank === 7 || p.rank === 6) targets.push([3, 0], [-3, 0], [0, 4], [0, -4]);
-                targets.forEach(([dr, dc]) => {
-                    const tr = p.r + dr, tc = p.c + dc;
-                    if (this.canMove(p, tr, tc, board)) moves.push({ p, tr, tc });
-                });
-            }
-        });
-        return moves;
+        const rulesBoard = this.getAiCompatibleMap(board);
+        const colorIndex = color === 'blue' ? 0 : 1;
+        return AnimalChessRules.getAllLegalMoves(rulesBoard, colorIndex).map(m => ({
+            p: board[m.y1][m.x1],
+            tr: m.y2,
+            tc: m.x2
+        }));
     }
 
     // 统计某一方剩余棋子数（用于「吃光判负」）
