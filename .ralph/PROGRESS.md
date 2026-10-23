@@ -44,8 +44,26 @@
   - P1-5 后 Worker 顶层只剩函数与 `onmessage`，无跨次搜索共享状态。
 - 下一轮从：**P2-1**（抽 `rules.js` 唯一规则源）开始。高风险项，必须先给 `verify.mjs` 补规则断言再动；注意保持「双击 index.html 可玩」（普通 `<script>` + Worker `importScripts` 或内联注入，禁止构建步骤）。
 
+### 第 3 轮 — 2026-10-23 10:06
+- 完成：
+  - P2-1（commit `78a854c`）唯一规则源 `rules.js`：`canEat` / `canMove` / `getLegalMovesFrom` / `getAllLegalMoves` 纯函数，棋盘约定为列优先 `board[x][y]`、颜色 `0=蓝 / 1=红`；主线程 `Game.canMove` / `getAllValidMoves` 全部委托，删除 `checkEat`；Worker Blob 前缀注入 `AnimalChessRules.source`（同一工厂函数 `Function#toString` 序列化），Worker 内不再有第二套规则。
+    - 顺带修复一个潜伏 bug：旧 `getAllValidMoves` 的狮虎跳河候选只有 `[3,0]/[0,4]`（行 3、列 4），方向/距离写反；规则化后按 3/4 双向覆盖，`hasLegalMoves` 的「无子可动判和」更准确。
+  - P2-2（commit `96263ea`）AI 引擎移出模板字符串，独立为 `ai-worker.js`：页面只加载工厂，`game.js` 用 `AnimalChessAiEngine.toString()` + 规则源码拼 Worker Blob；不引入 fetch / 构建步骤，双击 `index.html` 仍可玩。`ai-worker.js` 在 `importScripts` 环境（先加载 `rules.js`）也会自动启动。
+- 验证：每项提交前 `.\.ralph\verify.cmd` MUST 全绿。新增 MUST：
+  - 规则断言 18 条（鼠象、陷阱、水陆限制、进河、狮虎跨河/阻挡/落水、兽穴、开局 22/22 步）
+  - `game.js` 无 `canEat` / `checkEat`、`index.html` 先 rules.js 后 game.js
+  - 主线程 `canMove` 与 `rules.canMove` 开局全坐标逐一比对一致
+  - AI 返回走法必须通过 `rules.canMove`
+  - P2-2：`ai-worker.js` 存在、`game.js` 无 `workerCode` 模板、页面/Worker 两种加载方式均可启动
+- 注意：
+  - `verify.mjs` 现在按真实加载顺序在 vm 沙箱中模拟页面（rules.js → ai-worker.js）与 Worker（规则源码 + 引擎工厂），与 `game.js` 的 Blob 拼装一致。
+  - 规则坐标是列优先；主线程用 `getAiCompatibleMap(board)` 转换，AI 直接使用同一结构。
+  - 工作树出现两个**非本任务**未跟踪文件（`asar-list.cjs`、`pi-ai-README.zh.md`，疑似环境/其他进程产生），未提交、勿删。
+- 下一轮从：**P2-3**（拆分 `Game`：至少分出渲染与规则职责，`game.js` 仍为入口）开始；随后 P2-4 配置分离。
+
 ## 交接摘要（当前状态）
 
-- HEAD 应为 `affb507` 之后的 docs commit；P1 全绿，P2 未开始。
+- HEAD 应为 P2-2 之后；P1、P2-1、P2-2 全绿，P2-3/P2-4 未开始。
+- 当前文件：`index.html`（入口，依次加载 `rules.js` → `ai-worker.js` → `game.js`）、`rules.js`（唯一规则源）、`ai-worker.js`（AI 引擎工厂）、`game.js`（Game 类 + Worker 组装）、`style.css`。
 - 每轮必须先读本文件与 `TASKS.md`，再跑一次 `.\.ralph\verify.cmd` 确认基线。
-- 可用任务：P2-1 / P2-2 / P2-3 / P2-4 / P3-1…P3-7 / P4-1…P4-6。
+- 可用任务：P2-3 / P2-4 / P3-1…P3-7 / P4-1…P4-6。

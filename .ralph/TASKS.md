@@ -61,8 +61,8 @@ $pnpm = "C:\Users\hohox\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\pnpm\
 
 ### P2 架构
 
-- [ ] **P2-1** 抽出唯一规则源 `rules.js`：`canEat` / `canMove` / `getLegalMoves` 纯函数，主线程与 AI **共用同一实现**（不得保留两套）
-- [ ] **P2-2** AI 代码移出模板字符串，成为可独立加载的 worker 源（保持自包含，可用 `importScripts` 或内联规则）
+- [x] **P2-1** 抽出唯一规则源 `rules.js`：`canEat` / `canMove` / `getLegalMoves` 纯函数，主线程与 AI **共用同一实现**（不得保留两套）
+- [x] **P2-2** AI 代码移出模板字符串，成为可独立加载的 worker 源（保持自包含，可用 `importScripts` 或内联规则）
 - [ ] **P2-3** 拆分 `Game` 大类：至少分出渲染与规则职责，`game.js` 仍为入口
 - [ ] **P2-4** 配置分离：规则数据（`rivers`/`traps`/`dens`/`pst`）与 UI 文案拆成独立对象/文件
 
