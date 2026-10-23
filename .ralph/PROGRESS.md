@@ -61,9 +61,30 @@
   - 工作树出现两个**非本任务**未跟踪文件（`asar-list.cjs`、`pi-ai-README.zh.md`，疑似环境/其他进程产生），未提交、勿删。
 - 下一轮从：**P2-3**（拆分 `Game`：至少分出渲染与规则职责，`game.js` 仍为入口）开始；随后 P2-4 配置分离。
 
+### 第 4 轮 — 2026-10-23 10:32
+- 完成：
+  - P2-3 + P2-4（同一 commit `fd2549c`，两项改动互相依赖，合在一次提交）：
+    - 新增 `renderer.js`：`AnimalChessRenderer` 类只负责 canvas 绘制（网格/河道/陷阱/兽穴/棋子/选中圈），持有 pulse/needsRedraw/画布尺寸；`Game` 只调用 `renderer.draw(board, selected)`。
+    - 新增 `game-state.js`：`AnimalChessGameState` 持有 board/turn/selected/gameOver/startTime，负责开局摆子、`getAiCompatibleMap`、`canMove`/`getAllValidMoves`（全部委托 `rules.js`）、`applyMove`（返回 `{captured,winner?,draw?}`）与终局判定；不碰 DOM/canvas。
+    - `game.js` 从 527 行缩到约 330 行，只剩编排：DOM 事件、UI 文案、日志、AI Worker、动画循环，仍是页面入口（`DOMContentLoaded → new Game()`）。
+    - 新增 `config.js`：`AnimalChessConfig = { VERSION, BOARD, RULES, UI_TEXT }`，`RULES` 收纳 rivers/traps/dens/pst/pieces/startPositions，`UI_TEXT` 独立文案对象；删除 `game.js` 内联 CONFIG。
+    - `index.html` 加载顺序：`config.js → rules.js → ai-worker.js → renderer.js → game-state.js → game.js`，仍是普通 `<script>`，双击可玩、零构建。
+  - `verify.mjs` 新增 MUST：
+    - P2-3 共 9 条：文件存在、脚本顺序、`game.js` 无 canvas 绘制、仍是入口、类暴露、GameState 开局 16 子/红先、Renderer 用假 ctx 无 DOM 绘制冒烟（fillRect/strokeRect/arc/fillText 均有调用）、画布尺寸、GameState.canMove 全坐标与 rules 一致。
+    - P2-4 共 8 条：config.js 位置、VERSION/BOARD/RULES/UI_TEXT 结构、规则数据独立、UI 文案独立、迁移后 rivers/traps/dens 数据与基线逐一相等、开局摆子各 8、game.js 无规则字面量、game.js 消费 AnimalChessConfig。
+    - 原 P1-6/P2-1 无头测试改为加载 `config.js + rules.js + game-state.js + game.js`，`makeHeadlessGame` 显式清空默认棋盘。
+- 验证：`.\.ralph\verify.cmd` MUST 全绿、退出码 0（含 AI 开局走法 1.5s 与规则基线 22/22）。
+- 注意：
+  - 提交信息同时含 P2-3 与 P2-4；`PROGRESS`/`TASKS` 在随后 docs commit 中更新。
+  - 两个非本任务未跟踪文件 `asar-list.cjs`、`pi-ai-README.zh.md` 仍未提交、勿删。
+  - P3-3 的 TARGET 判定已改为匹配 `window.devicePixelRatio` 代码，避免被注释里的字样误判。
+- 下一轮从：**P3-1**（静止时停止 rAF 空转，改为按需调度）开始；注意 P3-2 脉冲动画与 P3-1 同源，建议同一轮内先拆调度再修脉冲。
+  - 设计提示：若只用 rAF 无限循环做呼吸动画，P3-1 与 P3-2 会互相抵消。推荐把河道/兽穴呼吸效果改为 CSS `@keyframes` 叠层（`#fx-layer`）+ canvas 按需重绘：JS 无脏状态/无棋子插值时不再申请帧，脉冲由 CSS 持续动画，两个任务同时满足；或退而求其次用 visibilitychange + prefers-reduced-motion + 时间驱动的节流帧，并在 PROGRESS 说明取舍。
+
 ## 交接摘要（当前状态）
 
-- HEAD 应为 P2-2 之后；P1、P2-1、P2-2 全绿，P2-3/P2-4 未开始。
-- 当前文件：`index.html`（入口，依次加载 `rules.js` → `ai-worker.js` → `game.js`）、`rules.js`（唯一规则源）、`ai-worker.js`（AI 引擎工厂）、`game.js`（Game 类 + Worker 组装）、`style.css`。
+- HEAD 应为第 4 轮代码提交 `fd2549c`（P2-3/P2-4）之后；P1 全部、P2 全部完成，P3/P4 未开始。
+- 当前文件：`index.html`（入口，依次加载 `config.js` → `rules.js` → `ai-worker.js` → `renderer.js` → `game-state.js` → `game.js`）、`config.js`（数据：BOARD/RULES/UI_TEXT）、`rules.js`（唯一规则源）、`ai-worker.js`（AI 引擎工厂）、`renderer.js`（绘制）、`game-state.js`（状态与走子）、`game.js`（编排入口）、`style.css`。
 - 每轮必须先读本文件与 `TASKS.md`，再跑一次 `.\.ralph\verify.cmd` 确认基线。
-- 可用任务：P2-3 / P2-4 / P3-1…P3-7 / P4-1…P4-6。
+- 可用任务：P3-1…P3-7 / P4-1…P4-6。
+
