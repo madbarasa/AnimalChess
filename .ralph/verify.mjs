@@ -11,6 +11,7 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -150,6 +151,70 @@ try {
   worker = true;
 } catch (e) {
   must('AI worker 可独立加载并运行', false, String(e.message || e).slice(0, 300));
+}
+
+console.log('\n=== MUST：终局判定（P1-6 回归） ===');
+
+// 在 vm 里加载 game.js，只用 Game.prototype 的纯逻辑方法，不触碰真实 DOM。
+function makeHeadlessGame(Game) {
+  const g = Object.create(Game.prototype);
+  g.board = Array(ROWS).fill().map(() => Array(COLS).fill(null));
+  g.turn = 'red';
+  g.mode = 'pvp';
+  g.gameOver = false;
+  g.isThinking = false;
+  g.selected = null;
+  g.startTime = Date.now();
+  g.log = () => {};
+  g.updateUI = () => {};
+  g.triggerRedraw = () => {};
+  g.shakeEffect = () => {};
+  g.aiAction = () => { g._aiCalled = true; };
+  g.win = (side) => { g._won = side; g.gameOver = true; };
+  g.drawGame = (side) => { g._drawn = side; g.gameOver = true; };
+  g.add = (r, c, rank, color) => {
+    g.board[r][c] = { rank, color, r, c, name: '\u5b50', x: 0, y: 0, targetX: 0, targetY: 0 };
+    return g.board[r][c];
+  };
+  return g;
+}
+
+try {
+  const gameSrc = read('game.js');
+  const sandbox = { document: { addEventListener() {} } };
+  vm.createContext(sandbox);
+  vm.runInContext(gameSrc + '\n;globalThis.__Game = Game;', sandbox);
+  const Game = sandbox.__Game;
+
+  // 吃光对方最后一子 → 判负
+  {
+    const g = makeHeadlessGame(Game);
+    const lion = g.add(0, 0, 7, 'red');
+    g.add(0, 1, 1, 'blue');
+    g.executeMove(lion, 0, 1);
+    must('P1-6 吃光对方棋子判负', g._won === 'red', JSON.stringify({ won: g._won, drawn: g._drawn }));
+  }
+
+  // 轮走方无合法走法 → 判和
+  {
+    const g = makeHeadlessGame(Game);
+    g.add(0, 0, 7, 'blue'); // 蓝狮被两枚红象堵死
+    g.add(0, 1, 8, 'red');
+    g.add(1, 0, 8, 'red');
+    must('P1-6 无子可动可被识别', !g.hasLegalMoves('blue'));
+    g.executeMove(g.add(4, 3, 1, 'red'), 4, 4);
+    must('P1-6 无子可动判和', g._drawn === 'blue', JSON.stringify({ won: g._won, drawn: g._drawn }));
+  }
+
+  // 进兽穴判胜优先级不变
+  {
+    const g = makeHeadlessGame(Game);
+    g.add(0, 3, 1, 'blue');
+    g.executeMove(g.add(1, 3, 7, 'red'), 0, 3);
+    must('P1-6 进兽穴仍判胜', g._won === 'red', JSON.stringify({ won: g._won, drawn: g._drawn }));
+  }
+} catch (e) {
+  must('P1-6 终局判定测试可运行', false, String(e.message || e).slice(0, 300));
 }
 
 console.log('\n=== TARGET：任务进度（不阻断提交）===');

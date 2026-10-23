@@ -33,6 +33,10 @@ const CONFIG = {
         victory: (side) => `${side} 统领了战场！`,
         timeTaken: (m, s) => `用时: ${m}:${s}`,
         gameEnd: (side) => `🏆 终结: ${side}获得了胜利！`,
+        drawTitle: "DRAW",
+        drawTurn: "和棋",
+        drawReason: (side) => `${side}无子可动，双方握手言和。`,
+        drawLog: (side) => `🤝 和棋: ${side}无子可动`,
         animalNames: ["鼠", "猫", "狗", "狼", "豹", "虎", "狮", "象"]
     },
     cell: 80,
@@ -356,7 +360,7 @@ function pickFallbackDecision(map) {
 
 // 接收 Worker 消息
 onmessage = function(e) {
-    const { map, personality, maxTime = 1500 } = e.data;
+    const { map, personality, maxTime = 1500, requestId = null } = e.data;
     
     let finalDecision = null;
     let maxDepth = personality === 'aggressive' ? 7 : 4; 
@@ -388,23 +392,29 @@ onmessage = function(e) {
         finalDecision = pickFallbackDecision(map);
     }
 
-    postMessage({ point: finalDecision });
+    postMessage({ point: finalDecision, requestId });
 }
 `;
         const blob = new Blob([workerCode], { type: 'application/javascript' });
         this.aiWorker = new Worker(URL.createObjectURL(blob));
         
         this.aiWorker.onmessage = (e) => {
-            const decision = e.data.point;
+            const { point: decision, requestId } = e.data;
+            // 重新开始/新开一局会递增 gameId：旧棋局的迟到回包直接丢弃，避免污染新棋盘
+            if (requestId !== this.gameId) return;
             if (decision) {
                 const { x1, y1, x2, y2 } = decision;
-                const p = this.board[y1][x1];
-                if (p) {
+                const p = this.board[y1] && this.board[y1][x1];
+                if (p && p.color === 'blue' && this.turn === 'blue' && !this.gameOver) {
                     this.executeMove(p, y2, x2);
+                } else {
+                    this.isThinking = false;
+                    this.updateUI();
                 }
             } else {
+                // Worker 兜底后仍无走法：AI 无子可动，判和
                 this.isThinking = false;
-                this.updateUI();
+                if (!this.gameOver) this.drawGame('blue');
             }
         };
 
@@ -415,6 +425,7 @@ onmessage = function(e) {
         this.selected = null;
         this.gameOver = false;
         this.isThinking = false;
+        this.gameId = 0;
         this.pulse = 0;
         this.startTime = Date.now();
         this.needsRedraw = true;
@@ -443,6 +454,8 @@ onmessage = function(e) {
     }
 
     init() {
+        this.gameId++;          // 作废所有在途 AI 请求
+        this.isThinking = false;
         this.board = Array(CONFIG.rows).fill().map(() => Array(CONFIG.cols).fill(null));
         this.turn = 'red';
         this.gameOver = false;
@@ -557,7 +570,8 @@ onmessage = function(e) {
         this.aiWorker.postMessage({
             map: aiMap,
             personality: this.personality,
-            maxTime: this.personality === 'aggressive' ? 1500 : 500
+            maxTime: this.personality === 'aggressive' ? 1500 : 500,
+            requestId: this.gameId
         });
     }
 
@@ -620,6 +634,16 @@ onmessage = function(e) {
             }
         });
         return moves;
+    }
+
+    // 统计某一方剩余棋子数（用于「吃光判负」）
+    countPieces(board, color) {
+        return board.flat().filter(p => p && p.color === color).length;
+    }
+
+    // 某一方是否还有合法走法（用于「无子可动判和」）
+    hasLegalMoves(color, board = this.board) {
+        return this.getAllValidMoves(color, board).length > 0;
     }
 
     // --- 渲染系统 ---
@@ -723,11 +747,18 @@ onmessage = function(e) {
 
         if (this.isDenOccupied(this.board, p.color)) return this.win(p.color);
 
+        // 吃光对方棋子：直接判负（原实现只判兽穴，极小概率会出现一方已无子却继续下）
+        const foeColor = p.color === 'red' ? 'blue' : 'red';
+        if (this.countPieces(this.board, foeColor) === 0) return this.win(p.color);
+
         this.turn = this.turn === 'red' ? 'blue' : 'red';
         this.selected = null;
         this.isThinking = false;
         this.updateUI();
         this.triggerRedraw();
+
+        // 轮到走棋的一方无合法走法：判和，避免棋局卡死
+        if (!this.hasLegalMoves(this.turn)) return this.drawGame(this.turn);
 
         if (this.mode === 'pve' && this.turn === 'blue' && !this.gameOver) {
             this.aiAction();
@@ -783,11 +814,16 @@ onmessage = function(e) {
         setTimeout(() => el.classList.remove('shake'), 400);
     }
 
-    win(side) {
-        this.gameOver = true;
+    elapsedText() {
         const totalTime = Math.floor((Date.now() - this.startTime) / 1000);
         const mins = Math.floor(totalTime / 60).toString().padStart(2, '0');
         const secs = (totalTime % 60).toString().padStart(2, '0');
+        return CONFIG.UI_TEXT.timeTaken(mins, secs);
+    }
+
+    win(side) {
+        this.gameOver = true;
+        this.isThinking = false;
 
         const overlay = document.getElementById('victory-overlay');
         const title = document.getElementById('victory-title');
@@ -801,10 +837,40 @@ onmessage = function(e) {
         const sideText = side === 'red' ? CONFIG.UI_TEXT.redSide : CONFIG.UI_TEXT.blueSide;
         msg.innerText = CONFIG.UI_TEXT.victory(sideText);
         msg.style.color = side === 'red' ? "var(--neon-red)" : "var(--neon-blue)";
-        time.innerText = CONFIG.UI_TEXT.timeTaken(mins, secs);
+        time.innerText = this.elapsedText();
 
         overlay.classList.remove('hidden');
         this.log(CONFIG.UI_TEXT.gameEnd(sideText), 'system');
+        this.triggerRedraw();
+    }
+
+    // 和棋：一方无子可动（含 AI 搜索确认无合法走法）
+    drawGame(side) {
+        this.gameOver = true;
+        this.isThinking = false;
+        this.selected = null;
+
+        const overlay = document.getElementById('victory-overlay');
+        const title = document.getElementById('victory-title');
+        const msg = document.getElementById('victory-msg');
+        const time = document.getElementById('victory-time');
+        const sideText = side === 'red' ? CONFIG.UI_TEXT.redSide : CONFIG.UI_TEXT.blueSide;
+
+        title.innerText = CONFIG.UI_TEXT.drawTitle;
+        title.style.background = "linear-gradient(to bottom, #ffd166, #f77f00)";
+        title.style.webkitBackgroundClip = "text";
+
+        msg.innerText = CONFIG.UI_TEXT.drawReason(sideText);
+        msg.style.color = "var(--neon-green)";
+        time.innerText = this.elapsedText();
+
+        overlay.classList.remove('hidden');
+        this.log(CONFIG.UI_TEXT.drawLog(sideText), 'system');
+
+        const display = document.getElementById('turn-display');
+        display.innerText = CONFIG.UI_TEXT.drawTurn;
+        display.style.color = "var(--neon-green)";
+
         this.triggerRedraw();
     }
 }
