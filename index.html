@@ -49,6 +49,8 @@
 
 <!-- 规则唯一实现来源：主线程与 AI Worker 共用 rules.js（见 rules.js 文件头） -->
 <script src="rules.js"></script>
+<!-- AI 引擎独立源文件：页面只加载，真正运行在 game.js 构造的 Worker Blob 里 -->
+<script src="ai-worker.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

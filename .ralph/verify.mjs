@@ -58,19 +58,33 @@ if (exists('index.html')) {
   must('index.html 引用了 style.css', /<link[^>]+href=["'][^"']*style\.css/.test(html));
 }
 
-// 3. AI worker 源码抽取（兼容内嵌 / 独立文件 / 独立 rules）
+// 3. AI worker 源码抽取（P2-2 后来自 ai-worker.js；旧内嵌模板仍兼容）
 function loadWorkerSource() {
   if (!exists('game.js')) throw new Error('game.js 不存在');
+  if (exists('ai-worker.js')) {
+    // 模拟页面加载顺序，取到真实的引擎工厂与规则源码，再拼出与 game.js 完全一致的 Worker 源
+    const page = createSandbox();
+    vm.runInContext(read('rules.js'), page);
+    vm.runInContext(read('ai-worker.js'), page);
+    const engine = page.AnimalChessAiEngine;
+    const rulesSource = page.AnimalChessRules && page.AnimalChessRules.source;
+    if (typeof engine !== 'function' || !rulesSource) {
+      throw new Error('ai-worker.js 未暴露 AnimalChessAiEngine 或 rules.source');
+    }
+    return {
+      code: rulesSource + '\n(' + engine.toString() + ')(self, self.AnimalChessRules);',
+      origin: 'ai-worker.js（rules.js 源码随 Worker 注入）',
+      bundled: true
+    };
+  }
   const src = read('game.js');
   const m = src.match(/const\s+workerCode\s*=\s*`([\s\S]*?)`;/);
-  if (m) return { code: m[1], origin: 'game.js 内嵌 workerCode' };
-  for (const cand of ['ai-worker.js', 'worker.js']) {
-    if (exists(cand)) return { code: read(cand), origin: cand };
-  }
-  throw new Error('找不到 AI 源码（workerCode 模板字符串 或 ai-worker.js）');
+  if (m) return { code: m[1], origin: 'game.js 内嵌 workerCode', bundled: false };
+  throw new Error('找不到 AI 源码（ai-worker.js 或 workerCode 模板字符串）');
 }
 
-function buildEvalSource(code) {
+function buildEvalSource(code, bundled = false) {
+  if (bundled) return code;
   // 若规则已抽到 rules.js，先把纯函数拼进作用域（去 ESM 导出关键字）
   let prefix = '';
   if (exists('rules.js')) {
@@ -125,11 +139,11 @@ function createSandbox(extra = {}) {
 
 let worker = null;
 try {
-  const { code, origin } = loadWorkerSource();
+  const { code, origin, bundled } = loadWorkerSource();
   console.log(`  \u2139 AI 源码来源：${origin}`);
   let out = null;
   const sandbox = createSandbox({ postMessage: (msg) => (out = msg) });
-  vm.runInContext(buildEvalSource(code), sandbox);
+  vm.runInContext(buildEvalSource(code, bundled), sandbox);
   const handler = sandbox.onmessage;
   must('AI worker 暴露 onmessage', typeof handler === 'function');
   const initialMap = () => toAiMap(buildBoard(
@@ -213,10 +227,33 @@ try {
   must('P2-1 game.js 不再保留第二套 canEat', !/function\s+canEat\s*\(/.test(gameSrc));
   must('P2-1 game.js 不再保留第二套 checkEat', !/checkEat/.test(gameSrc));
   const html = read('index.html');
+  const scriptPos = (name) => html.search(new RegExp(`<script[^>]+src=["'][^"']*${name.replace('.', '\\.')}`));
   must('P2-1 index.html 先加载 rules.js 再加载 game.js',
-    /<script[^>]+src=["'][^"']*rules\.js/.test(html) && html.indexOf('rules.js') < html.indexOf('game.js'));
+    scriptPos('rules.js') !== -1 && scriptPos('rules.js') < scriptPos('game.js'));
 } catch (e) {
   must('P2-1 规则测试可运行', false, String(e.message || e).slice(0, 300));
+}
+
+console.log('\n=== MUST：AI 源码独立（P2-2） ===');
+
+try {
+  const gameSrc = read('game.js');
+  const html = read('index.html');
+  must('P2-2 ai-worker.js 存在', exists('ai-worker.js'));
+  must('P2-2 game.js 已无 workerCode 模板字符串', !/const\s+workerCode\s*=\s*`/.test(gameSrc));
+  must('P2-2 game.js 通过 AnimalChessAiEngine 构造 Worker', /AnimalChessAiEngine/.test(gameSrc));
+  const scriptPos = (name) => html.search(new RegExp(`<script[^>]+src=["'][^"']*${name.replace('.', '\\.')}`));
+  must('P2-2 index.html 在 game.js 前加载 ai-worker.js',
+    scriptPos('ai-worker.js') !== -1 && scriptPos('ai-worker.js') < scriptPos('game.js'));
+
+  // 独立 worker 场景：importScripts('rules.js') + importScripts('ai-worker.js') 也应自动启动
+  const independent = createSandbox({ postMessage: () => {} });
+  vm.runInContext(read('rules.js'), independent);
+  independent.importScripts = () => {};
+  vm.runInContext(read('ai-worker.js'), independent);
+  must('P2-2 ai-worker.js 可在独立 Worker 环境自动启动', typeof independent.onmessage === 'function');
+} catch (e) {
+  must('P2-2 AI 源码独立测试可运行', false, String(e.message || e).slice(0, 300));
 }
 
 
