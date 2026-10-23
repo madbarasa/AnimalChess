@@ -92,11 +92,14 @@
                 ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(this.cssWidth, i * cell); ctx.stroke();
             }
 
-            // 河道底色（静态，不做脉冲；脉冲效果由 CSS #river-pulse 层叠加）
+            // 河道底色（静态填充）+ CSS #river-pulse 层叠加呼吸效果
             rules.rivers.forEach(([r, c]) => {
                 const x = c * cell, y = r * cell;
-                ctx.fillStyle = 'rgba(0, 242, 254, 0.06)';
+                ctx.fillStyle = 'rgba(0, 242, 254, 0.15)';
                 ctx.fillRect(x + 2, y + 2, cell - 4, cell - 4);
+                ctx.strokeStyle = 'rgba(0, 242, 254, 0.25)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x + 3, y + 3, cell - 6, cell - 6);
             });
 
             rules.traps.forEach((t) => {
