@@ -1,0 +1,26 @@
+{
+  "name": "animal-chess-3d",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Animal Chess (斗兽棋) 3D remake with Three.js",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@electron/asar": "^4.3.1",
+    "@playwright/test": "^1.64.1",
+    "lil-gui": "^0.21.0",
+    "pngjs": "^7.0.0",
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/pngjs": "^6.0.5",
+    "@types/three": "^0.184.1",
+    "typescript": "^5.0.0",
+    "vite": "^8.0.13"
+  }
+}
