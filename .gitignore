@@ -8,3 +8,4 @@ search_results.csv
 .acl-reports/
 .probe/
 .sandbox-pass
+.scratch/
