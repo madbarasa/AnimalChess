@@ -34,6 +34,8 @@ export class AnimalChessGame {
   private pickPlane: THREE.Mesh;
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
+  private timerInterval: number | null = null;
+  private kbdDir: [number, number] | null = null;
 
   constructor(canvas: HTMLCanvasElement, mode: GameMode = 'pve') {
     this.mode = mode;
@@ -94,10 +96,15 @@ export class AnimalChessGame {
 
     this.setupInputHandlers(canvas);
     this.setupUIHandlers();
+    this.setupKeyboardHandlers();
 
     window.addEventListener('resize', () => this.onResize());
 
+    this.ui.setActiveMode(this.mode);
     this.ui.updateTurn(this.gameState.turn);
+    this.ui.updateRoster(this.gameState.countPieces('red'), this.gameState.countPieces('blue'));
+    this.ui.log(CONFIG.UI_TEXT.enterMode(this.ui.getPersonality(), CONFIG.VERSION), 'system');
+    this.startTimer();
     this.animationId = requestAnimationFrame(() => this.animate());
   }
 
@@ -179,6 +186,7 @@ export class AnimalChessGame {
     // 尝试走子
     if (!this.gameState.canMove(this.selectedPiece, row, col)) {
       this.ui.showStatus('该位置不可落子');
+      this.ui.shakeCanvas();
       return;
     }
 
@@ -210,22 +218,33 @@ export class AnimalChessGame {
 
   /** 应用一步走子并同步渲染与 UI */
   private performMove(piece: PieceVisual, row: number, col: number): void {
+    const fromRow = piece.row;
+    const fromCol = piece.col;
     const result = this.gameState.applyMove(piece, row, col);
     this.pieceRenderer.updatePieces(this.gameState.pieces);
     this.clearSelection();
 
+    // Show last-move marker
+    this.boardRenderer.showLastMove({ row: fromRow, col: fromCol }, { row, col });
+
     if (result.captured) {
-      this.ui.showStatus(
-        `${piece.color === 'red' ? '红方' : '蓝方'}${piece.name} 捕食 ${result.captured.name}`,
-      );
+      const side = piece.color === 'red' ? CONFIG.UI_TEXT.redBrief : CONFIG.UI_TEXT.blueBrief;
+      this.ui.log(CONFIG.UI_TEXT.eatAction(side, piece.name, result.captured.name), piece.color);
     }
 
+    // Update roster
+    this.ui.updateRoster(this.gameState.countPieces('red'), this.gameState.countPieces('blue'));
+
     if (result.winner) {
-      this.ui.showWinner(result.winner);
+      this.ui.log(CONFIG.UI_TEXT.gameEnd(result.winner === 'red' ? CONFIG.UI_TEXT.redSide : CONFIG.UI_TEXT.blueSide), 'system');
+      this.ui.showWinner(result.winner, this.gameState.countPieces('red'), this.gameState.countPieces('blue'), this.elapsedText());
+      this.stopTimer();
       return;
     }
     if (result.draw) {
-      this.ui.showWinner('draw');
+      this.ui.log(CONFIG.UI_TEXT.drawLog(result.draw === 'red' ? CONFIG.UI_TEXT.redSide : CONFIG.UI_TEXT.blueSide), 'system');
+      this.ui.showDraw(result.draw, this.gameState.countPieces('red'), this.gameState.countPieces('blue'), this.elapsedText());
+      this.stopTimer();
       return;
     }
 
@@ -237,7 +256,7 @@ export class AnimalChessGame {
     if (this.gameState.gameOver || this.gameState.turn !== AI_SIDE) return;
 
     this.isAiThinking = true;
-    this.ui.showStatus(CONFIG.UI_TEXT.aiThinking);
+    this.ui.updateTurn(this.gameState.turn, true);
 
     // 让出一帧，保证「AI 计算中」状态先绘制
     await new Promise((resolve) => setTimeout(resolve, 220));
@@ -266,14 +285,128 @@ export class AnimalChessGame {
       this.restart();
       this.ui.showStatus('游戏重新开始');
     });
+
+    this.ui.getContainer().addEventListener('personality-change', ((event: CustomEvent) => {
+      const personality = event.detail as string;
+      const maxTime = personality === 'aggressive' ? 1500 : 500;
+      this.aiEngine.setMaxTime(maxTime);
+      const pName = personality === 'aggressive' ? CONFIG.UI_TEXT.aggressive : CONFIG.UI_TEXT.conservative;
+      this.ui.log(CONFIG.UI_TEXT.aiSwitch(pName), 'system');
+    }) as EventListener);
+  }
+
+  private setupKeyboardHandlers(): void {
+    window.addEventListener('keydown', (e) => this.handleKeyboard(e));
+  }
+
+  private handleKeyboard(e: KeyboardEvent): void {
+    if (this.gameState.gameOver || this.isAiThinking) return;
+    const sel = this.selectedPiece;
+    switch (e.key) {
+      case 'Escape':
+        if (sel) {
+          this.clearSelection();
+        }
+        break;
+      case 'Enter':
+        if (sel && this.kbdDir) {
+          const [dr, dc] = this.kbdDir;
+          const tr = sel.row + dr;
+          const tc = sel.col + dc;
+          if (this.gameState.canMove(sel, tr, tc)) {
+            this.performMove(sel, tr, tc);
+            if (this.mode === 'pve' && !this.gameState.gameOver && this.gameState.turn === AI_SIDE) {
+              void this.makeAiMove();
+            }
+          } else {
+            this.ui.shakeCanvas();
+          }
+        }
+        break;
+      case 'ArrowUp':
+      case 'w':
+      case 'W':
+        this.kbdDir = [-1, 0];
+        this.previewMove(sel);
+        break;
+      case 'ArrowDown':
+      case 's':
+      case 'S':
+        this.kbdDir = [1, 0];
+        this.previewMove(sel);
+        break;
+      case 'ArrowLeft':
+      case 'a':
+      case 'A':
+        this.kbdDir = [0, -1];
+        this.previewMove(sel);
+        break;
+      case 'ArrowRight':
+      case 'd':
+      case 'D':
+        this.kbdDir = [0, 1];
+        this.previewMove(sel);
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+  }
+
+  private previewMove(sel: PieceVisual | null): void {
+    if (!sel || !this.kbdDir) return;
+    const [dr, dc] = this.kbdDir;
+    const tr = sel.row + dr;
+    const tc = sel.col + dc;
+    if (this.gameState.canMove(sel, tr, tc)) {
+      this.boardRenderer.updateHighlight(tr, tc);
+      setTimeout(() => {
+        this.boardRenderer.hideHighlight();
+      }, 400);
+    }
+  }
+
+  private startTimer(): void {
+    if (this.timerInterval !== null) return;
+    this.timerInterval = window.setInterval(() => {
+      if (this.gameState.gameOver) {
+        this.stopTimer();
+        return;
+      }
+      this.ui.updateTimer(this.elapsedText());
+    }, 500);
+  }
+
+  private stopTimer(): void {
+    if (this.timerInterval !== null) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+  }
+
+  private elapsedText(): string {
+    const endTime = this.gameState.gameOver ? this.gameState.endTime : Date.now();
+    const totalTime = Math.floor((endTime - this.gameState.startTime) / 1000);
+    const mins = Math.floor(totalTime / 60).toString().padStart(2, '0');
+    const secs = (totalTime % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
   }
 
   private restart(): void {
     this.gameState.reset();
     this.isAiThinking = false;
+    this.kbdDir = null;
     this.pieceRenderer.updatePieces(this.gameState.pieces);
     this.clearSelection();
+    this.boardRenderer.hideLastMove();
+    this.ui.setActiveMode(this.mode);
     this.ui.updateTurn(this.gameState.turn);
+    this.ui.updateRoster(this.gameState.countPieces('red'), this.gameState.countPieces('blue'));
+    this.ui.clearLog();
+    this.ui.hideVictoryOverlay();
+    this.ui.log(CONFIG.UI_TEXT.enterMode(this.ui.getPersonality(), CONFIG.VERSION), 'system');
+    this.stopTimer();
+    this.startTimer();
   }
 
   private animate(): void {
@@ -354,6 +487,7 @@ export class AnimalChessGame {
   /** 释放全部资源 */
   dispose(): void {
     cancelAnimationFrame(this.animationId);
+    this.stopTimer();
     this.ui.getContainer().remove();
 
     for (const group of [this.boardRenderer.getGroup(), this.pieceRenderer.getGroup()]) {

@@ -10,6 +10,8 @@ export class BoardRenderer {
   private meshes: Map<string, THREE.Mesh>;
   private highlightMesh: THREE.Mesh;
   private selectedMesh: THREE.Mesh;
+  private lastMoveFromMesh: THREE.Mesh;
+  private lastMoveToMesh: THREE.Mesh;
   private cellSize: number;
   private boardOffsetX: number;
   private boardOffsetZ: number;
@@ -36,6 +38,21 @@ export class BoardRenderer {
     );
     this.selectedMesh.visible = false;
     this.selectedMesh.rotation.x = Math.PI / 2;
+
+    // Last-move markers (from/to positions)
+    this.lastMoveFromMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(this.cellSize * 0.9, 0.02, this.cellSize * 0.9),
+      new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.25 }),
+    );
+    this.lastMoveFromMesh.visible = false;
+    this.lastMoveFromMesh.position.y = 0.02;
+
+    this.lastMoveToMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(this.cellSize * 0.9, 0.02, this.cellSize * 0.9),
+      new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.35 }),
+    );
+    this.lastMoveToMesh.visible = false;
+    this.lastMoveToMesh.position.y = 0.02;
   }
 
   getGroup(): THREE.Group {
@@ -76,6 +93,8 @@ export class BoardRenderer {
     this.group.add(...this.meshes.values());
     this.group.add(this.highlightMesh);
     this.group.add(this.selectedMesh);
+    this.group.add(this.lastMoveFromMesh);
+    this.group.add(this.lastMoveToMesh);
   }
 
   private createTerrain(): void {
@@ -245,6 +264,29 @@ export class BoardRenderer {
 
   hideSelection(): void {
     this.selectedMesh.visible = false;
+  }
+
+  /** Show last-move markers (from and to positions) */
+  showLastMove(from: { row: number; col: number }, to: { row: number; col: number }): void {
+    this.lastMoveFromMesh.position.set(
+      from.col * this.cellSize + this.boardOffsetX,
+      0.02,
+      from.row * this.cellSize + this.boardOffsetZ,
+    );
+    this.lastMoveFromMesh.visible = true;
+
+    this.lastMoveToMesh.position.set(
+      to.col * this.cellSize + this.boardOffsetX,
+      0.02,
+      to.row * this.cellSize + this.boardOffsetZ,
+    );
+    this.lastMoveToMesh.visible = true;
+  }
+
+  /** Hide last-move markers */
+  hideLastMove(): void {
+    this.lastMoveFromMesh.visible = false;
+    this.lastMoveToMesh.visible = false;
   }
 
   /** Animate water shimmer */

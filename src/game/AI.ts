@@ -19,6 +19,11 @@ export class AIEngine {
     this.depth = searchDepth;
   }
 
+  /** 动态调整搜索时间上限（用于切换 AI 性格） */
+  setMaxTime(ms: number): void {
+    this.maxTime = ms;
+  }
+
   /** 为指定一方搜索最佳走法（Alpha-Beta 剪枝） */
   getBestMove(board: Board, side: 'red' | 'blue'): Move | null {
     const startTime = Date.now();

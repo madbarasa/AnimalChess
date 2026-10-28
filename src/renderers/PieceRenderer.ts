@@ -8,7 +8,7 @@ import type { PieceVisual } from '../game/GameState';
 
 export class PieceRenderer {
   private group: THREE.Group;
-  private pieceMeshes: Map<string, THREE.Group>;
+  private pieceMeshes: Map<PieceVisual, THREE.Group>;
   private cellSize: number;
   private boardOffsetX: number;
   private boardOffsetZ: number;
@@ -28,23 +28,25 @@ export class PieceRenderer {
 
   /** Create and add all piece meshes */
   updatePieces(pieces: Map<string, PieceVisual>): void {
-    // Remove old pieces
-    for (const [key, mesh] of this.pieceMeshes) {
-      if (!pieces.has(key)) {
+    const currentPieces = new Set(pieces.values());
+    
+    // Remove pieces no longer in the game state
+    for (const [piece, mesh] of this.pieceMeshes) {
+      if (!currentPieces.has(piece)) {
         this.group.remove(mesh);
         this.disposePiece(mesh);
-        this.pieceMeshes.delete(key);
+        this.pieceMeshes.delete(piece);
       }
     }
 
     // Add or update pieces
-    for (const [key, piece] of pieces) {
-      if (!this.pieceMeshes.has(key)) {
+    for (const piece of currentPieces) {
+      if (!this.pieceMeshes.has(piece)) {
         const mesh = this.createPieceMesh(piece);
-        this.pieceMeshes.set(key, mesh);
+        this.pieceMeshes.set(piece, mesh);
         this.group.add(mesh);
       } else {
-        const existing = this.pieceMeshes.get(key)!;
+        const existing = this.pieceMeshes.get(piece)!;
         this.updatePiecePosition(existing, piece);
       }
     }

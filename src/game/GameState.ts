@@ -43,6 +43,7 @@ export class GameState {
   public gameOver: boolean;
   public selected: PieceVisual | null;
   public startTime: number;
+  public endTime: number;
 
   private readonly cellSize: number;
 
@@ -54,6 +55,7 @@ export class GameState {
     this.gameOver = false;
     this.selected = null;
     this.startTime = Date.now();
+    this.endTime = 0;
     this.cellSize = CONFIG.BOARD.cellSize;
 
     this.initializePieces();
@@ -79,6 +81,7 @@ export class GameState {
     this.gameOver = false;
     this.selected = null;
     this.startTime = Date.now();
+    this.endTime = 0;
     this.initializePieces();
   }
 
@@ -200,6 +203,7 @@ export class GameState {
     // Check win conditions
     if (this.isDenOccupied(piece.color)) {
       this.gameOver = true;
+      this.endTime = Date.now();
       return { captured, winner: piece.color };
     }
 
@@ -207,6 +211,7 @@ export class GameState {
     const foeColor = piece.color === 'red' ? 'blue' : 'red';
     if (this.countPieces(foeColor) === 0) {
       this.gameOver = true;
+      this.endTime = Date.now();
       return { captured, winner: piece.color };
     }
 
@@ -216,6 +221,7 @@ export class GameState {
     // Check if current side has no legal moves (draw)
     if (!this.hasLegalMoves(this.turn)) {
       this.gameOver = true;
+      this.endTime = Date.now();
       return { captured, draw: this.turn };
     }
 
