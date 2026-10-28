@@ -9,3 +9,4 @@ search_results.csv
 .probe/
 .sandbox-pass
 .scratch/
+.vite/
