@@ -10,3 +10,9 @@ search_results.csv
 .acl-reports/
 .probe/
 .sandbox-pass
+
+# 构建与缓存产物（3D 工程）
+dist/
+artifacts/
+.vite/
+.scratch/

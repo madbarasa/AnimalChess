@@ -1,0 +1,72 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [ main, 3D ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      # Pages 站点是整站替换式发布：2D 与 3D 必须合成同一个 artifact，
+      # 否则任一侧单独部署都会把另一侧从线上抹掉。
+      - name: Checkout main (2D 静态站)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: site-2d
+
+      - name: Checkout 3D (Vite 工程)
+        uses: actions/checkout@v4
+        with:
+          ref: 3D
+          path: site-3d
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: site-3d/package-lock.json
+
+      - name: Install 3D dependencies
+        run: npm ci
+        working-directory: site-3d
+
+      - name: Build 3D
+        run: npm run build
+        working-directory: site-3d
+        env:
+          VITE_BASE_URL: /AnimalChess/3D/
+
+      - name: Compose site (2D 在根，3D 在 /3D/)
+        run: |
+          mkdir -p public
+          cp -r site-2d/animal-chess/. public/
+          mkdir -p public/3D
+          cp -r site-3d/dist/. public/3D/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
