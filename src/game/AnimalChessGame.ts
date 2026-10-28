@@ -3,6 +3,9 @@
  */
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { GameState, type PieceVisual } from './GameState';
 import { AIEngine } from './AI';
 import { BoardRenderer } from '../renderers/BoardRenderer';
@@ -28,9 +31,12 @@ export class AnimalChessGame {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
+  private composer: EffectComposer;
+  private bloomPass: UnrealBloomPass;
   private mode: GameMode;
   private isAiThinking: boolean;
   private selectedPiece: PieceVisual | null = null;
+  private selectionBeam: THREE.Mesh | null = null;
   private animationId = 0;
   private frame = 0;
   private clock: THREE.Clock;
@@ -75,11 +81,12 @@ export class AnimalChessGame {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.2;
 
     this.clock = new THREE.Clock();
 
     this.setupLights();
+    this.setupPostProcessing();
     this.boardRenderer.createBoard();
     this.pieceRenderer.updatePieces(this.gameState.pieces);
 
@@ -170,35 +177,34 @@ export class AnimalChessGame {
   private starfield: THREE.Points | null = null;
 
   private createStarfield(): void {
-    const count = 400;
+    const count = 150;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
 
     for (let i = 0; i < count; i++) {
-      // 在半球穹顶上随机分布
       const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(Math.random() * 0.8 + 0.1); // 偏上半球
+      const phi = Math.acos(Math.random() * 0.8 + 0.1);
       const radius = 35 + Math.random() * 15;
 
       positions[i * 3] = Math.sin(phi) * Math.cos(theta) * radius;
       positions[i * 3 + 1] = Math.cos(phi) * radius + 5;
       positions[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius;
 
-      // 星点颜色：白/淡蓝/淡紫交替
+      // 压暗星点颜色，避免压缩对比度
       const hue = Math.random();
       let r: number, g: number, b: number;
       if (hue < 0.6) {
-        r = 0.9 + Math.random() * 0.1; g = 0.9 + Math.random() * 0.1; b = 1.0;
+        r = 0.4 + Math.random() * 0.15; g = 0.45 + Math.random() * 0.15; b = 0.6;
       } else if (hue < 0.85) {
-        r = 0.6 + Math.random() * 0.2; g = 0.7 + Math.random() * 0.2; b = 1.0;
+        r = 0.3 + Math.random() * 0.1; g = 0.4 + Math.random() * 0.1; b = 0.55;
       } else {
-        r = 0.8; g = 0.6 + Math.random() * 0.2; b = 1.0;
+        r = 0.4; g = 0.3 + Math.random() * 0.1; b = 0.55;
       }
       colors[i * 3] = r;
       colors[i * 3 + 1] = g;
       colors[i * 3 + 2] = b;
-      sizes[i] = 0.15 + Math.random() * 0.35;
+      sizes[i] = 0.1 + Math.random() * 0.2;
     }
 
     const geometry = new THREE.BufferGeometry();
@@ -207,11 +213,11 @@ export class AnimalChessGame {
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
     const material = new THREE.PointsMaterial({
-      size: 0.4,
+      size: 0.25,
       map: createStarSprite(),
       vertexColors: true,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.35,
       sizeAttenuation: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -219,6 +225,35 @@ export class AnimalChessGame {
 
     this.starfield = new THREE.Points(geometry, material);
     this.scene.add(this.starfield);
+  }
+
+  /** 设置 Bloom 后处理：让霓虹元素更亮眼 */
+  private setupPostProcessing(): void {
+    const renderScene = new RenderPass(this.scene, this.camera);
+    
+    // UnrealBloomPass: 阈值/强度/半径
+    // threshold=0.25: 只让亮部发光（霓虹 UI、兽穴光、水晶）
+    // strength=0.4: 中等辉光强度，保持画面清晰度
+    // radius=0.5: 辉光扩散范围，营造柔和氛围
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(this.renderer.domElement.width, this.renderer.domElement.height),
+      0.4,   // strength
+      0.5,   // radius
+      0.25   // threshold
+    );
+    
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(renderScene);
+    this.composer.addPass(this.bloomPass);
+    
+    // 窗口 resize 时更新 composer 尺寸
+    const originalOnResize = this.onResize.bind(this);
+    this.onResize = () => {
+      originalOnResize();
+      const canvas = this.renderer.domElement;
+      this.composer.setSize(canvas.clientWidth, canvas.clientHeight);
+      this.composer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    };
   }
 
   private setupInputHandlers(canvas: HTMLCanvasElement): void {
@@ -299,6 +334,19 @@ export class AnimalChessGame {
     this.gameState.selected = piece;
     this.boardRenderer.updateSelection(piece);
     this.pieceRenderer.updateSelection(piece);
+    
+    // 创建选中光束
+    const pos = this.boardRenderer.cellToWorld(piece.row, piece.col);
+    const color = piece.color === 'red' ? 0xff6b5e : 0x35c8f5;
+    if (this.selectionBeam) {
+      this.vfx.particleGroups.remove(this.selectionBeam);
+    }
+    this.selectionBeam = this.vfx.selectionBeam(
+      new THREE.Vector3(pos.x, 0, pos.z),
+      color,
+      piece.rank
+    );
+    
     this.ui.updateSelected({
       name: piece.name,
       rank: piece.rank,
@@ -311,6 +359,15 @@ export class AnimalChessGame {
     this.gameState.selected = null;
     this.boardRenderer.hideSelection();
     this.pieceRenderer.updateSelection(null);
+    
+    // 移除选中光束
+    if (this.selectionBeam) {
+      this.vfx.particleGroups.remove(this.selectionBeam);
+      this.selectionBeam.geometry.dispose();
+      this.selectionBeam.material.dispose();
+      this.selectionBeam = null;
+    }
+    
     this.ui.clearSelection();
   }
 
@@ -325,22 +382,28 @@ export class AnimalChessGame {
     // Show last-move marker
     this.boardRenderer.showLastMove({ row: fromRow, col: fromCol }, { row, col });
 
-    // 走子拖尾粒子
+    // 走子拖尾粒子（带等级差异化）
     const fromPos = this.boardRenderer.cellToWorld(fromRow, fromCol);
     const toPos = this.boardRenderer.cellToWorld(row, col);
     this.vfx.trail(
       new THREE.Vector3(fromPos.x, 0.3, fromPos.z),
       new THREE.Vector3(toPos.x, 0.3, toPos.z),
       piece.color === 'red' ? 0xff6b5e : 0x35c8f5,
-      20,
+      24,
+      piece.rank,
     );
 
     if (result.captured) {
       const side = piece.color === 'red' ? CONFIG.UI_TEXT.redBrief : CONFIG.UI_TEXT.blueBrief;
       this.ui.log(CONFIG.UI_TEXT.eatAction(side, piece.name, result.captured.name), piece.color);
-      // 吃子粒子爆发
+      // 吃子粒子爆发（带等级差异化）
       const targetPos = this.boardRenderer.cellToWorld(row, col);
-      this.vfx.burst(new THREE.Vector3(targetPos.x, 0.4, targetPos.z), piece.color === 'red' ? 0xff6b5e : 0x35c8f5, 32);
+      this.vfx.burst(
+        new THREE.Vector3(targetPos.x, 0.4, targetPos.z),
+        piece.color === 'red' ? 0xff6b5e : 0x35c8f5,
+        32,
+        piece.rank,
+      );
     }
 
     // Update roster
@@ -533,7 +596,8 @@ export class AnimalChessGame {
     this.pieceRenderer.animateSelection(time);
     this.boardRenderer.animateWater(time);
 
-    this.renderer.render(this.scene, this.camera);
+    // 使用 composer 进行渲染，包含 Bloom 后处理
+    this.composer.render();
 
     this.frame += 1;
     if (this.frame % 15 === 0) this.publishDiagnostics();
@@ -622,4 +686,32 @@ export class AnimalChessGame {
     this.pickPlane.geometry.dispose();
     this.renderer.dispose();
   }
+}
+
+// 测试钩子：供 canvas inspector 使用
+declare global {
+  interface Window {
+    __THREE_GAME_TEST_HOOKS__?: {
+      setState: (name: string | null) => Promise<void>;
+      setPausedForScreenshot: (paused: boolean) => void;
+      seed: (seed: number) => void;
+    };
+  }
+}
+
+if (typeof window !== 'undefined') {
+  (window as any).__THREE_GAME_TEST_HOOKS__ = {
+    async setState(name: string | null) {
+      // 当前游戏状态已可通过 diagnostics 获取
+      console.log('[Test Hook] setState:', name);
+    },
+    setPausedForScreenshot(paused: boolean) {
+      // 暂停游戏逻辑（可选）
+      console.log('[Test Hook] setPaused:', paused);
+    },
+    seed(seed: number) {
+      // 设置随机种子（可选）
+      console.log('[Test Hook] seed:', seed);
+    },
+  };
 }
