@@ -280,6 +280,24 @@ export class PieceRenderer {
     }
   }
 
+  /** 创建接触阴影圆盘 */
+  private createContactShadow(): THREE.Mesh {
+    const radius = this.cellSize * 1.1;
+    const geometry = new THREE.CircleGeometry(radius, 64);
+
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.35,
+      depthWrite: false,
+      blending: THREE.MultiplyBlending,
+    });
+
+    const shadowMesh = new THREE.Mesh(geometry, material);
+    shadowMesh.position.y = -0.02; // 稍微下沉
+    return shadowMesh;
+  }
+
   private createPieceMesh(piece: PieceVisual): THREE.Group {
     const group = new THREE.Group();
     const cfg = SILHOUETTE_CONFIGS[piece.rank];
@@ -555,6 +573,10 @@ export class PieceRenderer {
     const textSprite = this.createTextSprite(piece.name, color);
     textSprite.position.y = cfg.headOffsetY + headSize * 1.5;
     group.add(textSprite);
+    
+    // ========== CONTACT SHADOW ==========
+    const contactShadow = this.createContactShadow();
+    group.add(contactShadow);
     
     // Position the piece
     this.setPiecePosition(group, piece);

@@ -4,6 +4,12 @@
 
 import * as THREE from 'three';
 import { CONFIG, isRiver, getTrapSide, getDenSide } from '../config';
+import {
+  createGrassTexture,
+  createRiverbedTexture,
+  createHazardTexture,
+  createDenTexture,
+} from '../assets/ProceduralTextures';
 
 export class BoardRenderer {
   private group: THREE.Group;
@@ -102,34 +108,59 @@ export class BoardRenderer {
 
   private createTerrain(): void {
     const geometry = new THREE.BoxGeometry(this.cellSize * 0.95, 0.1, this.cellSize * 0.95);
-    
+
+    // 预生成可复用纹理
+    const grassTex0 = createGrassTexture(0);
+    const grassTex1 = createGrassTexture(1);
+    const riverbedTex = createRiverbedTexture();
+    const hazardTex = createHazardTexture();
+    const denRedTex = createDenTexture('red');
+    const denBlueTex = createDenTexture('blue');
+
     for (let x = 0; x < CONFIG.BOARD.cols; x++) {
       for (let y = 0; y < CONFIG.BOARD.rows; y++) {
         const river = isRiver(y, x);
         const trapSide = getTrapSide(y, x);
         const denSide = getDenSide(y, x);
 
-        let color: string;
-        if (river) {
-          color = '#1c749e';
-        } else if (trapSide === 'blue') {
-          color = 'rgba(255, 107, 94, 0.3)';
-        } else if (trapSide === 'red') {
-          color = 'rgba(53, 200, 245, 0.3)';
-        } else if (denSide === 'blue') {
-          color = '#3568f5';
-        } else if (denSide === 'red') {
-          color = '#ff6b5e';
-        } else {
-          // Checkerboard pattern
-          color = (x + y) % 2 === 0 ? '#171b30' : '#1a2040';
-        }
+        let material: THREE.MeshStandardMaterial;
 
-        const material = new THREE.MeshStandardMaterial({
-          color,
-          roughness: river ? 0.3 : 0.8,
-          metalness: river ? 0.1 : 0.05,
-        });
+        if (river) {
+          material = new THREE.MeshStandardMaterial({
+            map: riverbedTex,
+            color: '#1c749e',
+            roughness: 0.3,
+            metalness: 0.1,
+          });
+        } else if (denSide) {
+          const tex = denSide === 'red' ? denRedTex : denBlueTex;
+          material = new THREE.MeshStandardMaterial({
+            map: tex,
+            color: denSide === 'red' ? '#ff6b5e' : '#3568f5',
+            emissive: denSide === 'red' ? '#ff6b5e' : '#3568f5',
+            emissiveIntensity: 0.3,
+            roughness: 0.4,
+            metalness: 0.6,
+          });
+        } else if (trapSide) {
+          material = new THREE.MeshStandardMaterial({
+            map: hazardTex,
+            color: trapSide === 'blue' ? 'rgba(255,107,94,0.3)' : 'rgba(53,200,245,0.3)',
+            roughness: 0.7,
+            metalness: 0.2,
+            transparent: true,
+            opacity: 0.85,
+          });
+        } else {
+          // 棋盘格交替草地纹理
+          const tex = (x + y) % 2 === 0 ? grassTex0 : grassTex1;
+          material = new THREE.MeshStandardMaterial({
+            map: tex,
+            color: '#2a3050',
+            roughness: 0.85,
+            metalness: 0.05,
+          });
+        }
 
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.set(
@@ -138,7 +169,7 @@ export class BoardRenderer {
           y * this.cellSize + this.boardOffsetZ,
         );
         mesh.receiveShadow = true;
-        
+
         const key = `${x}_${y}`;
         this.meshes.set(key, mesh);
         this.group.add(mesh);
@@ -147,10 +178,10 @@ export class BoardRenderer {
 
     // Add river flow effect
     this.createRiverEffect();
-    
+
     // Add den markers
     this.createDenMarkers();
-    
+
     // Add trap indicators
     this.createTrapIndicators();
   }

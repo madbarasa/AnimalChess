@@ -10,6 +10,7 @@ import { PieceRenderer } from '../renderers/PieceRenderer';
 import { GameUI } from '../ui/GameUI';
 import { VfxSystem } from '../systems/VfxSystem';
 import { CONFIG } from '../config';
+import { createStarSprite } from '../assets/ProceduralTextures';
 
 export type GameMode = 'pve' | 'pvp';
 
@@ -84,6 +85,9 @@ export class AnimalChessGame {
 
     this.scene.add(this.boardRenderer.getGroup());
     this.scene.add(this.pieceRenderer.getGroup());
+
+    // 背景星点层：远景粒子，增加画面深度与色彩层次
+    this.createStarfield();
 
     // 不可见拾取平面：点击定位棋盘格
     this.pickPlane = new THREE.Mesh(
@@ -160,6 +164,61 @@ export class AnimalChessGame {
       trapLight.position.set(pos.x, 0.9, pos.z);
       this.scene.add(trapLight);
     }
+  }
+
+  /** 背景星点层：远景粒子穹顶，增加画面深度 */
+  private starfield: THREE.Points | null = null;
+
+  private createStarfield(): void {
+    const count = 400;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+      // 在半球穹顶上随机分布
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(Math.random() * 0.8 + 0.1); // 偏上半球
+      const radius = 35 + Math.random() * 15;
+
+      positions[i * 3] = Math.sin(phi) * Math.cos(theta) * radius;
+      positions[i * 3 + 1] = Math.cos(phi) * radius + 5;
+      positions[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius;
+
+      // 星点颜色：白/淡蓝/淡紫交替
+      const hue = Math.random();
+      let r: number, g: number, b: number;
+      if (hue < 0.6) {
+        r = 0.9 + Math.random() * 0.1; g = 0.9 + Math.random() * 0.1; b = 1.0;
+      } else if (hue < 0.85) {
+        r = 0.6 + Math.random() * 0.2; g = 0.7 + Math.random() * 0.2; b = 1.0;
+      } else {
+        r = 0.8; g = 0.6 + Math.random() * 0.2; b = 1.0;
+      }
+      colors[i * 3] = r;
+      colors[i * 3 + 1] = g;
+      colors[i * 3 + 2] = b;
+      sizes[i] = 0.15 + Math.random() * 0.35;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.4,
+      map: createStarSprite(),
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.8,
+      sizeAttenuation: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+
+    this.starfield = new THREE.Points(geometry, material);
+    this.scene.add(this.starfield);
   }
 
   private setupInputHandlers(canvas: HTMLCanvasElement): void {
