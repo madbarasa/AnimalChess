@@ -1,11 +1,9 @@
-# 依赖与构建产物
 node_modules/
-
-# 系统与日志
-.DS_Store
+dist/
+test-results/
+artifacts/
 *.log
-
-# 本地调试产物
+.DS_Store
 search_results.csv
 .acl-reports/
 .probe/
