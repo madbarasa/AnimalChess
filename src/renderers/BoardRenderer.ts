@@ -86,6 +86,9 @@ export class BoardRenderer {
     // Create floor terrain
     this.createTerrain();
     
+    // Create ground base and decorative border
+    this.createEnvironmentBase();
+    
     // Create grid lines
     this.createGrid();
     
@@ -152,16 +155,87 @@ export class BoardRenderer {
     this.createTrapIndicators();
   }
 
-  private createRiverEffect(): void {
-    // Water shimmer effect using transparent overlay planes
-    const waterGeometry = new THREE.PlaneGeometry(this.cellSize * 0.9, 0.01);
-    const waterMaterial = new THREE.MeshBasicMaterial({
-      color: '#63d5ff',
-      transparent: true,
-      opacity: 0.3,
+  /** 环境基底：大底盘 + 四角装饰 + 边框立柱 */
+  private createEnvironmentBase(): void {
+    const cs = this.cellSize;
+    const boardWidth = CONFIG.BOARD.cols * cs;
+    const boardHeight = CONFIG.BOARD.rows * cs;
+    const margin = cs * 0.6;
+
+    // 大底盘：比棋盘略大的深色平台
+    const baseGeometry = new THREE.BoxGeometry(
+      boardWidth + margin * 2,
+      0.2,
+      boardHeight + margin * 2,
+    );
+    const baseMaterial = new THREE.MeshStandardMaterial({
+      color: '#0b0f20',
+      roughness: 0.9,
+      metalness: 0.05,
     });
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    base.position.y = -0.11;
+    base.receiveShadow = true;
+    this.group.add(base);
+
+    // 边框立柱：棋盘四角
+    const postGeometry = new THREE.CylinderGeometry(cs * 0.15, cs * 0.18, cs * 0.7, 8);
+    const postMaterial = new THREE.MeshStandardMaterial({
+      color: '#141a30',
+      roughness: 0.7,
+      metalness: 0.3,
+    });
+    const corners = [
+      { x: -boardWidth / 2, z: -boardHeight / 2 },
+      { x: boardWidth / 2, z: -boardHeight / 2 },
+      { x: -boardWidth / 2, z: boardHeight / 2 },
+      { x: boardWidth / 2, z: boardHeight / 2 },
+    ];
+    for (const c of corners) {
+      const post = new THREE.Mesh(postGeometry, postMaterial);
+      post.position.set(c.x, cs * 0.25, c.z);
+      post.castShadow = true;
+      post.receiveShadow = true;
+      this.group.add(post);
+      
+      // 顶部发光水晶
+      const crystal = new THREE.Mesh(
+        new THREE.OctahedronGeometry(cs * 0.12, 0),
+        new THREE.MeshStandardMaterial({
+          color: '#5dff6a',
+          emissive: '#5dff6a',
+          emissiveIntensity: 0.5,
+          roughness: 0.1,
+          metalness: 0.8,
+        }),
+      );
+      crystal.position.set(c.x, cs * 0.7, c.z);
+      crystal.castShadow = true;
+      this.group.add(crystal);
+    }
+  }
+
+  private waterMeshes: { mesh: THREE.Mesh; baseZ: Float32Array }[] = [];
+
+  private createRiverEffect(): void {
+    // 带顶点细分的水面，供正弦波动画使用
+    const segments = 8;
 
     for (const [row, col] of CONFIG.RIVERS) {
+      const waterGeometry = new THREE.PlaneGeometry(
+        this.cellSize * 0.9,
+        this.cellSize * 0.9,
+        segments,
+        segments,
+      );
+      const waterMaterial = new THREE.MeshStandardMaterial({
+        color: '#2f9ec9',
+        transparent: true,
+        opacity: 0.65,
+        roughness: 0.15,
+        metalness: 0.6,
+      });
+
       const mesh = new THREE.Mesh(waterGeometry, waterMaterial);
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(
@@ -170,6 +244,10 @@ export class BoardRenderer {
         row * this.cellSize + this.boardOffsetZ,
       );
       this.group.add(mesh);
+
+      // 保存顶点初始高度，动画时在此基础上叠加正弦波
+      const posAttr = waterGeometry.getAttribute('position');
+      this.waterMeshes.push({ mesh, baseZ: new Float32Array(posAttr.array as Float32Array) });
     }
   }
 
@@ -289,8 +367,26 @@ export class BoardRenderer {
     this.lastMoveToMesh.visible = false;
   }
 
-  /** Animate water shimmer */
-  animateWater(_time: number): void {
-    // Placeholder for future water animation
+  /** 水面波浪动画：按世界坐标相位做正弦顶点置换 */
+  animateWater(time: number): void {
+    for (const { mesh, baseZ } of this.waterMeshes) {
+      const posAttr = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const arr = posAttr.array as Float32Array;
+      const base = baseZ;
+
+      for (let i = 0; i < posAttr.count; i++) {
+        const localX = arr[i * 3];
+        const localY = arr[i * 3 + 1];
+        // 世界坐标相位，让相邻河格的波浪连续
+        const worldX = mesh.position.x + localX;
+        const worldZ = mesh.position.z - localY;
+        arr[i * 3 + 2] =
+          base[i * 3 + 2] +
+          Math.sin(worldX * 2.2 + time * 1.8) * 0.028 +
+          Math.sin(worldZ * 3.1 + time * 2.4) * 0.018;
+      }
+      posAttr.needsUpdate = true;
+      mesh.geometry.computeVertexNormals();
+    }
   }
 }

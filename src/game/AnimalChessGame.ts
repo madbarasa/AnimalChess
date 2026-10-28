@@ -8,6 +8,7 @@ import { AIEngine } from './AI';
 import { BoardRenderer } from '../renderers/BoardRenderer';
 import { PieceRenderer } from '../renderers/PieceRenderer';
 import { GameUI } from '../ui/GameUI';
+import { VfxSystem } from '../systems/VfxSystem';
 import { CONFIG } from '../config';
 
 export type GameMode = 'pve' | 'pvp';
@@ -22,6 +23,7 @@ export class AnimalChessGame {
   private boardRenderer: BoardRenderer;
   private pieceRenderer: PieceRenderer;
   private ui: GameUI;
+  private vfx: VfxSystem;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
@@ -50,6 +52,8 @@ export class AnimalChessGame {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#0f141f');
     this.scene.fog = new THREE.Fog('#0f141f', 18, 46);
+
+    this.vfx = new VfxSystem(this.scene);
 
     this.camera = new THREE.PerspectiveCamera(
       45,
@@ -109,20 +113,53 @@ export class AnimalChessGame {
   }
 
   private setupLights(): void {
-    const hemiLight = new THREE.HemisphereLight('#cfe2ff', '#1a2033', 0.75);
+    // 环境半球光：蓝白天光 + 暗蓝地面反射
+    const hemiLight = new THREE.HemisphereLight('#cfe2ff', '#1a2033', 0.55);
     this.scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight('#fff5e6', 1.35);
-    dirLight.position.set(9, 16, 8);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.set(2048, 2048);
-    dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 60;
-    dirLight.shadow.camera.left = -12;
-    dirLight.shadow.camera.right = 12;
-    dirLight.shadow.camera.top = 12;
-    dirLight.shadow.camera.bottom = -12;
-    this.scene.add(dirLight);
+    // Key Light：暖白主光，前左上方，负责塑造形体与投影
+    const keyLight = new THREE.DirectionalLight('#fff0dc', 1.5);
+    keyLight.position.set(9, 16, 8);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.camera.near = 0.5;
+    keyLight.shadow.camera.far = 60;
+    keyLight.shadow.camera.left = -12;
+    keyLight.shadow.camera.right = 12;
+    keyLight.shadow.camera.top = 12;
+    keyLight.shadow.camera.bottom = -12;
+    keyLight.shadow.bias = -0.0005;
+    this.scene.add(keyLight);
+
+    // Fill Light：冷蓝辅光，右侧低位，防止暗面死黑
+    const fillLight = new THREE.DirectionalLight('#6a8fd8', 0.45);
+    fillLight.position.set(10, 5, -6);
+    this.scene.add(fillLight);
+
+    // Rim Light：青色轮廓光，正后方，分离棋子与背景
+    const rimLight = new THREE.DirectionalLight('#7fdcff', 0.7);
+    rimLight.position.set(-4, 8, -14);
+    this.scene.add(rimLight);
+
+    // 兽穴点光：红/蓝两方巢穴上方的主题色辉光
+    for (const den of CONFIG.DENS) {
+      const denLight = new THREE.PointLight(
+        den.side === 'red' ? '#ff6b5e' : '#35c8f5',
+        1.6,
+        5.5,
+      );
+      const pos = this.boardRenderer.cellToWorld(den.row, den.col);
+      denLight.position.set(pos.x, 2.2, pos.z);
+      this.scene.add(denLight);
+    }
+
+    // 陷阱弱光：六个陷阱位上的冷光提示
+    for (const trap of CONFIG.TRAPS) {
+      const trapLight = new THREE.PointLight('#8a95c4', 0.35, 2.5);
+      const pos = this.boardRenderer.cellToWorld(trap.row, trap.col);
+      trapLight.position.set(pos.x, 0.9, pos.z);
+      this.scene.add(trapLight);
+    }
   }
 
   private setupInputHandlers(canvas: HTMLCanvasElement): void {
@@ -202,6 +239,7 @@ export class AnimalChessGame {
     this.selectedPiece = piece;
     this.gameState.selected = piece;
     this.boardRenderer.updateSelection(piece);
+    this.pieceRenderer.updateSelection(piece);
     this.ui.updateSelected({
       name: piece.name,
       rank: piece.rank,
@@ -213,6 +251,7 @@ export class AnimalChessGame {
     this.selectedPiece = null;
     this.gameState.selected = null;
     this.boardRenderer.hideSelection();
+    this.pieceRenderer.updateSelection(null);
     this.ui.clearSelection();
   }
 
@@ -227,9 +266,22 @@ export class AnimalChessGame {
     // Show last-move marker
     this.boardRenderer.showLastMove({ row: fromRow, col: fromCol }, { row, col });
 
+    // 走子拖尾粒子
+    const fromPos = this.boardRenderer.cellToWorld(fromRow, fromCol);
+    const toPos = this.boardRenderer.cellToWorld(row, col);
+    this.vfx.trail(
+      new THREE.Vector3(fromPos.x, 0.3, fromPos.z),
+      new THREE.Vector3(toPos.x, 0.3, toPos.z),
+      piece.color === 'red' ? 0xff6b5e : 0x35c8f5,
+      20,
+    );
+
     if (result.captured) {
       const side = piece.color === 'red' ? CONFIG.UI_TEXT.redBrief : CONFIG.UI_TEXT.blueBrief;
       this.ui.log(CONFIG.UI_TEXT.eatAction(side, piece.name, result.captured.name), piece.color);
+      // 吃子粒子爆发
+      const targetPos = this.boardRenderer.cellToWorld(row, col);
+      this.vfx.burst(new THREE.Vector3(targetPos.x, 0.4, targetPos.z), piece.color === 'red' ? 0xff6b5e : 0x35c8f5, 32);
     }
 
     // Update roster
@@ -239,6 +291,8 @@ export class AnimalChessGame {
       this.ui.log(CONFIG.UI_TEXT.gameEnd(result.winner === 'red' ? CONFIG.UI_TEXT.redSide : CONFIG.UI_TEXT.blueSide), 'system');
       this.ui.showWinner(result.winner, this.gameState.countPieces('red'), this.gameState.countPieces('blue'), this.elapsedText());
       this.stopTimer();
+      // 胜利闪光
+      this.vfx.victoryFlash();
       return;
     }
     if (result.draw) {
@@ -399,6 +453,7 @@ export class AnimalChessGame {
     this.pieceRenderer.updatePieces(this.gameState.pieces);
     this.clearSelection();
     this.boardRenderer.hideLastMove();
+    this.vfx.clear();
     this.ui.setActiveMode(this.mode);
     this.ui.updateTurn(this.gameState.turn);
     this.ui.updateRoster(this.gameState.countPieces('red'), this.gameState.countPieces('blue'));
@@ -416,6 +471,7 @@ export class AnimalChessGame {
 
     this.gameState.animatePieces();
     this.pieceRenderer.updatePieces(this.gameState.pieces);
+    this.pieceRenderer.animateSelection(time);
     this.boardRenderer.animateWater(time);
 
     this.renderer.render(this.scene, this.camera);
