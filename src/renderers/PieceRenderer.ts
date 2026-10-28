@@ -221,6 +221,8 @@ export class PieceRenderer {
   private boardOffsetX: number;
   private boardOffsetZ: number;
   private selectionRings: Map<PieceVisual, THREE.Group>;
+  private lastUpdateTime = Date.now();
+  private pieceHeadRotations: Map<string, number>; // key -> rotation angle
 
   constructor() {
     this.group = new THREE.Group();
@@ -230,6 +232,8 @@ export class PieceRenderer {
     
     this.boardOffsetX = -(CONFIG.BOARD.cols - 1) * this.cellSize / 2;
     this.boardOffsetZ = -(CONFIG.BOARD.rows - 1) * this.cellSize / 2;
+    
+    this.pieceHeadRotations = new Map();
   }
 
   getGroup(): THREE.Group {
@@ -282,19 +286,22 @@ export class PieceRenderer {
 
   /** 创建接触阴影圆盘 */
   private createContactShadow(): THREE.Mesh {
-    const radius = this.cellSize * 1.1;
-    const geometry = new THREE.CircleGeometry(radius, 64);
+    const radius = this.cellSize * 0.9;
+    const geometry = new THREE.CircleGeometry(radius, 32);
 
     const material = new THREE.MeshBasicMaterial({
       color: 0x000000,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.3,
       depthWrite: false,
-      blending: THREE.MultiplyBlending,
+      side: THREE.DoubleSide,
+      premultipliedAlpha: true,
     });
 
     const shadowMesh = new THREE.Mesh(geometry, material);
-    shadowMesh.position.y = -0.02; // 稍微下沉
+    shadowMesh.rotation.x = -Math.PI / 2;
+    shadowMesh.position.y = 0.005;
+    shadowMesh.name = 'contactShadow';
     return shadowMesh;
   }
 
@@ -715,16 +722,47 @@ export class PieceRenderer {
 
   /** Animation loop for selection ring pulse */
   animateSelection(time: number): void {
-    for (const [_piece, ring] of this.selectionRings) {
-      if (!ring.visible) continue;
+    // Idle 呼吸动画：所有棋子轻微上下浮动
+    const breatheSpeed = 0.5 + this.group.children.length * 0.01;
+    const breatheAmplitude = 0.02 + this.group.children.length * 0.0008;
+    
+    const now = Date.now();
+    const dt = (now - this.lastUpdateTime) / 1000;
+    this.lastUpdateTime = now;
+    
+    for (const [piece, mesh] of this.pieceMeshes) {
+      if (!mesh.parent) continue;
       
-      const pulse = 1.0 + 0.15 * Math.sin(time * 4);
+      // 轻微上下浮动（呼吸效果）
+      const breath = Math.sin(time * breatheSpeed) * breatheAmplitude;
+      const basePos = piece.visualX + this.boardOffsetX;
+      const currentZ = piece.visualY + this.boardOffsetZ;
+      mesh.position.set(basePos, breath, currentZ);
+      
+      // 头部小幅度转动
+      const key = `${piece.rank}_${piece.color}`;
+      const rotationSpeed = 0.3 + piece.rank * 0.03;
+      let headRotation = this.pieceHeadRotations.get(key) ?? 0;
+      headRotation += dt * rotationSpeed * (Math.random() - 0.5);
+      headRotation = Math.max(-0.03, Math.min(0.03, headRotation));
+      this.pieceHeadRotations.set(key, headRotation);
+      
+      const head = mesh.getObjectByName('head');
+      if (head instanceof THREE.Mesh) {
+        head.rotation.y = headRotation;
+      }
+      
+      // 选中环脉冲效果
+      const ring = this.selectionRings.get(piece);
+      if (!ring || !ring.visible) continue;
+      
+      const pulse = 1.0 + 0.15 * Math.sin(time * 4 + piece.rank);
       ring.scale.set(pulse, 1, pulse);
       
-      // Flicker opacity
+      // 闪烁内发光盘
       const glowDisc = ring.getObjectByName('glowDisc');
       if (glowDisc instanceof THREE.Mesh) {
-        glowDisc.material.opacity = 0.15 + 0.1 * Math.sin(time * 3 + 1);
+        glowDisc.material.opacity = 0.15 + 0.1 * Math.sin(time * 3 + 1 + piece.rank * 0.5);
       }
     }
   }
