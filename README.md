@@ -4,6 +4,13 @@
 
 基于原项目 [AnimalChess](https://github.com/madbarasa/AnimalChess) 的规则与 AI 引擎重建，所有规则逻辑与 Alpha‑Beta 搜索均从原 JS 移植为 TypeScript 并保持一致。
 
+## 🌐 在线试玩
+
+无需安装，浏览器直接打开：
+
+- **3D 版**：<https://madbarasa.github.io/AnimalChess/3D/>
+- **2D 版**：<https://madbarasa.github.io/AnimalChess/>
+
 ## 🎮 快速开始
 
 ```bash
