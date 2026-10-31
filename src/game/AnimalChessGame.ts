@@ -31,8 +31,8 @@ export class AnimalChessGame {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
-  private composer: EffectComposer;
-  private bloomPass: UnrealBloomPass;
+  private composer!: EffectComposer;
+  private bloomPass!: UnrealBloomPass;
   private mode: GameMode;
   private isAiThinking: boolean;
   private selectedPiece: PieceVisual | null = null;
@@ -339,7 +339,7 @@ export class AnimalChessGame {
     const pos = this.boardRenderer.cellToWorld(piece.row, piece.col);
     const color = piece.color === 'red' ? 0xff6b5e : 0x35c8f5;
     if (this.selectionBeam) {
-      this.vfx.particleGroups.remove(this.selectionBeam);
+      this.vfx.getGroup().remove(this.selectionBeam);
     }
     this.selectionBeam = this.vfx.selectionBeam(
       new THREE.Vector3(pos.x, 0, pos.z),
@@ -362,9 +362,9 @@ export class AnimalChessGame {
     
     // 移除选中光束
     if (this.selectionBeam) {
-      this.vfx.particleGroups.remove(this.selectionBeam);
+      this.vfx.getGroup().remove(this.selectionBeam);
       this.selectionBeam.geometry.dispose();
-      this.selectionBeam.material.dispose();
+      (this.selectionBeam.material as THREE.Material).dispose();
       this.selectionBeam = null;
     }
     
