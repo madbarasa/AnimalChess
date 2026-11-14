@@ -53,7 +53,7 @@ async function main() {
         timerValue: !!document.querySelector('.timer-value'),
         rosterRow: !!document.querySelector('.roster-row'),
         modeButtons: !!document.querySelector('.btn-group'),
-        personalitySelect: !!document.querySelector('.ai-config select'),
+        aiTier: !!document.querySelector('.ai-tier'),
         restartButton: !!document.querySelector('.restart-btn'),
         logContainer: !!document.querySelector('.log-container'),
         selectedInfo: !!document.querySelector('.selected-info'),
@@ -156,10 +156,10 @@ async function main() {
         return { error: 'Mesh not found for red piece' };
       }
 
-      // Find the body material (cylinder)
+      // 身体使用 LatheGeometry（美术升级后的程序化轮廓），取furMaterial 的颜色
       let bodyMaterial = null;
       mesh.traverse(child => {
-        if (child.type === 'Mesh' && child.geometry.type === 'CylinderGeometry') {
+        if (child.type === 'Mesh' && child.geometry.type === 'LatheGeometry' && child.material.color) {
           bodyMaterial = child.material;
         }
       });
@@ -169,6 +169,7 @@ async function main() {
       }
 
       const colorHex = '#' + bodyMaterial.color.getHexString();
+      // 捕获后棋子应为红色：furMaterial 对红方使用 #cc5544 基调
       const isRed = colorHex.toLowerCase() === '#cc5544';
 
       return {

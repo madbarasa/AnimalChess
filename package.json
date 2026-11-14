@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "test:ai": "node tests/ai/run.mjs"
   },
   "dependencies": {
     "@electron/asar": "^4.3.1",

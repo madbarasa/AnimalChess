@@ -127,7 +127,7 @@ async function runViewport(browser, viewport) {
       const afterSelect = await readDiagnostics(page);
 
       await clickCell(page, 5, 6); // 前进一格
-      await page.waitForTimeout(2500); // 等 AI 回手（含 220ms 思考延时）
+      await page.waitForTimeout(5500); // 等 AI 回手（含完整搜索预算）
       const afterMove = await readDiagnostics(page);
 
       const mouseAfter = afterMove.pieces.find(

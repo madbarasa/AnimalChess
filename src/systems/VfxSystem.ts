@@ -10,12 +10,10 @@ import * as THREE from 'three';
 export class VfxSystem {
   private scene: THREE.Scene;
   private particleGroups: THREE.Group;
-  private beamGroups: Map<number, THREE.Group>; // rank -> beam group cache
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.particleGroups = new THREE.Group();
-    this.beamGroups = new Map();
     this.scene.add(this.particleGroups);
   }
 
@@ -119,8 +117,6 @@ export class VfxSystem {
     const colors = new Float32Array(segments * 2 * 3);
     const color = new THREE.Color(colorHex);
     for (let i = 0; i < segments; i++) {
-      const t = i / segments;
-      const angle = t * Math.PI * 2;
       // 底部顶点（亮）
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;

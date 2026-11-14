@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "../../.test-build/ai",
+    "types": ["node"]
+  },
+  "include": ["../../src/game/rules.ts", "../../src/game/aiEngine.ts", "../../src/config.ts", "suite.ts", "crosscheck.ts"]
+}

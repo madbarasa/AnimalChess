@@ -14,3 +14,5 @@ dist/
 artifacts/
 .vite/
 .scratch/
+.test-build/
+_dsh_tmp/

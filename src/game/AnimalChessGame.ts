@@ -8,11 +8,11 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { GameState, type PieceVisual } from './GameState';
 import { AIEngine } from './AI';
+import { CONFIG } from '../config';
 import { BoardRenderer } from '../renderers/BoardRenderer';
 import { PieceRenderer } from '../renderers/PieceRenderer';
 import { GameUI } from '../ui/GameUI';
 import { VfxSystem } from '../systems/VfxSystem';
-import { CONFIG } from '../config';
 import { createStarSprite } from '../assets/ProceduralTextures';
 
 export type GameMode = 'pve' | 'pvp';
@@ -31,13 +31,14 @@ export class AnimalChessGame {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
-  private composer: EffectComposer;
-  private bloomPass: UnrealBloomPass;
+  private composer!: EffectComposer;
+  private bloomPass!: UnrealBloomPass;
   private mode: GameMode;
   private isAiThinking: boolean;
   private selectedPiece: PieceVisual | null = null;
   private selectionBeam: THREE.Mesh | null = null;
   private animationId = 0;
+  private gameId = 0;
   private frame = 0;
   private clock: THREE.Clock;
   private pickPlane: THREE.Mesh;
@@ -49,7 +50,7 @@ export class AnimalChessGame {
   constructor(canvas: HTMLCanvasElement, mode: GameMode = 'pve') {
     this.mode = mode;
     this.gameState = new GameState();
-    this.aiEngine = new AIEngine(600, 6);
+    this.aiEngine = new AIEngine();
     this.boardRenderer = new BoardRenderer();
     this.pieceRenderer = new PieceRenderer();
     this.ui = new GameUI();
@@ -118,7 +119,7 @@ export class AnimalChessGame {
     this.ui.setActiveMode(this.mode);
     this.ui.updateTurn(this.gameState.turn);
     this.ui.updateRoster(this.gameState.countPieces('red'), this.gameState.countPieces('blue'));
-    this.ui.log(CONFIG.UI_TEXT.enterMode(this.ui.getPersonality(), CONFIG.VERSION), 'system');
+    this.ui.log(CONFIG.UI_TEXT.enterMode(CONFIG.VERSION), 'system');
     this.startTimer();
     this.animationId = requestAnimationFrame(() => this.animate());
   }
@@ -339,7 +340,7 @@ export class AnimalChessGame {
     const pos = this.boardRenderer.cellToWorld(piece.row, piece.col);
     const color = piece.color === 'red' ? 0xff6b5e : 0x35c8f5;
     if (this.selectionBeam) {
-      this.vfx.particleGroups.remove(this.selectionBeam);
+      this.vfx.getGroup().remove(this.selectionBeam);
     }
     this.selectionBeam = this.vfx.selectionBeam(
       new THREE.Vector3(pos.x, 0, pos.z),
@@ -362,9 +363,9 @@ export class AnimalChessGame {
     
     // 移除选中光束
     if (this.selectionBeam) {
-      this.vfx.particleGroups.remove(this.selectionBeam);
+      this.vfx.getGroup().remove(this.selectionBeam);
       this.selectionBeam.geometry.dispose();
-      this.selectionBeam.material.dispose();
+      (this.selectionBeam.material as THREE.Material).dispose();
       this.selectionBeam = null;
     }
     
@@ -431,23 +432,44 @@ export class AnimalChessGame {
   private async makeAiMove(): Promise<void> {
     if (this.gameState.gameOver || this.gameState.turn !== AI_SIDE) return;
 
+    const gameId = this.gameId;
     this.isAiThinking = true;
     this.ui.updateTurn(this.gameState.turn, true);
 
     // 让出一帧，保证「AI 计算中」状态先绘制
-    await new Promise((resolve) => setTimeout(resolve, 220));
+    await new Promise((resolve) => setTimeout(resolve, 120));
 
-    const move = this.aiEngine.getBestMove(this.gameState.board, AI_SIDE);
-    this.isAiThinking = false;
-
-    if (!move) {
-      this.ui.showStatus('AI 无子可动');
+    let result;
+    try {
+      result = await this.aiEngine.getBestMove(this.gameState.board, AI_SIDE);
+    } catch (error) {
+      this.isAiThinking = false;
+      this.ui.showStatus(`AI 异常: ${error instanceof Error ? error.message : String(error)}`);
       return;
     }
 
-    const piece = this.gameState.pieces.get(`${move.x1}_${move.y1}`);
-    if (!piece) return;
+    // 重开或切模式后丢弃旧棋局的迟到结果
+    if (gameId !== this.gameId || this.gameState.gameOver || this.gameState.turn !== AI_SIDE) {
+      this.isAiThinking = false;
+      return;
+    }
+    this.isAiThinking = false;
 
+    const move = result.move;
+    const piece = this.gameState.pieces.get(`${move.x1}_${move.y1}`);
+    if (!piece) {
+      this.ui.showStatus('AI 无子可动');
+      return;
+    }
+    if (!this.gameState.canMove(piece, move.y2, move.x2)) {
+      this.ui.showStatus('AI 走法非法，已跳过');
+      return;
+    }
+
+    this.ui.log(
+      CONFIG.UI_TEXT.aiThinkingDone(result.depth, result.nodes, result.elapsedMs),
+      'system',
+    );
     this.performMove(piece, move.y2, move.x2);
   }
 
@@ -461,14 +483,6 @@ export class AnimalChessGame {
       this.restart();
       this.ui.showStatus('游戏重新开始');
     });
-
-    this.ui.getContainer().addEventListener('personality-change', ((event: CustomEvent) => {
-      const personality = event.detail as string;
-      const maxTime = personality === 'aggressive' ? 1500 : 500;
-      this.aiEngine.setMaxTime(maxTime);
-      const pName = personality === 'aggressive' ? CONFIG.UI_TEXT.aggressive : CONFIG.UI_TEXT.conservative;
-      this.ui.log(CONFIG.UI_TEXT.aiSwitch(pName), 'system');
-    }) as EventListener);
   }
 
   private setupKeyboardHandlers(): void {
@@ -569,6 +583,7 @@ export class AnimalChessGame {
   }
 
   private restart(): void {
+    this.gameId += 1;
     this.gameState.reset();
     this.isAiThinking = false;
     this.kbdDir = null;
@@ -581,7 +596,7 @@ export class AnimalChessGame {
     this.ui.updateRoster(this.gameState.countPieces('red'), this.gameState.countPieces('blue'));
     this.ui.clearLog();
     this.ui.hideVictoryOverlay();
-    this.ui.log(CONFIG.UI_TEXT.enterMode(this.ui.getPersonality(), CONFIG.VERSION), 'system');
+    this.ui.log(CONFIG.UI_TEXT.enterMode(CONFIG.VERSION), 'system');
     this.stopTimer();
     this.startTimer();
   }

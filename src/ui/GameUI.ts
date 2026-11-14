@@ -15,7 +15,6 @@ export class GameUI {
   private modeButtons!: HTMLDivElement;
   private pveBtn!: HTMLButtonElement;
   private pvpBtn!: HTMLButtonElement;
-  private personalitySelect!: HTMLSelectElement;
   private restartButton!: HTMLButtonElement;
   private logContainer!: HTMLDivElement;
   private selectedInfo!: HTMLDivElement;
@@ -122,17 +121,10 @@ export class GameUI {
     const aiLabel = document.createElement('label');
     aiLabel.textContent = CONFIG.UI_TEXT.aiEngineLabel(CONFIG.VERSION);
     aiConfig.appendChild(aiLabel);
-    this.personalitySelect = document.createElement('select');
-    const aggressiveOpt = document.createElement('option');
-    aggressiveOpt.value = 'aggressive';
-    aggressiveOpt.textContent = CONFIG.UI_TEXT.aggressiveDesc;
-    const conservativeOpt = document.createElement('option');
-    conservativeOpt.value = 'conservative';
-    conservativeOpt.textContent = CONFIG.UI_TEXT.conservativeDesc;
-    this.personalitySelect.appendChild(aggressiveOpt);
-    this.personalitySelect.appendChild(conservativeOpt);
-    this.personalitySelect.addEventListener('change', () => this.onPersonalityChange());
-    aiConfig.appendChild(this.personalitySelect);
+    const aiTier = document.createElement('div');
+    aiTier.className = 'ai-tier';
+    aiTier.textContent = '冠军难度 · 全力搜索';
+    aiConfig.appendChild(aiTier);
     statusCard.appendChild(aiConfig);
 
     const kbdHint = document.createElement('div');
@@ -238,10 +230,6 @@ export class GameUI {
 
   private selectMode(mode: string): void {
     this.container.dispatchEvent(new CustomEvent('mode-select', { detail: mode }));
-  }
-
-  private onPersonalityChange(): void {
-    this.container.dispatchEvent(new CustomEvent('personality-change', { detail: this.personalitySelect.value }));
   }
 
   private onRestart(): void {
@@ -378,11 +366,6 @@ export class GameUI {
   /** Get the UI container element */
   getContainer(): HTMLDivElement {
     return this.container;
-  }
-
-  /** Get current personality */
-  getPersonality(): string {
-    return this.personalitySelect.value;
   }
 
   private injectStyles(): void {
@@ -593,14 +576,17 @@ export class GameUI {
         margin-bottom: 5px;
       }
 
-      .ai-config select {
+      .ai-tier {
         width: 100%;
-        padding: 8px;
-        background: #242e54;
-        border: 1px solid #3a4680;
-        color: var(--text-main);
+        padding: 8px 10px;
+        background: linear-gradient(135deg, rgba(93, 255, 106, 0.14), rgba(53, 200, 245, 0.1));
+        border: 1px solid rgba(93, 255, 106, 0.45);
+        color: var(--neon-green);
         border-radius: 8px;
-        outline: none;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-align: center;
       }
 
       .kbd-hint {
