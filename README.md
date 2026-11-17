@@ -16,7 +16,7 @@
   <p align="center">
     使用 <strong>Three.js + TypeScript + Vite</strong> 完全重制的 3D 斗兽棋，玩家执红对弈冠军级 Alpha-Beta 搜索 AI
     <br />
-    <a href="#快速开始"><strong>快速开始 »</strong></a>
+    🎮 在线试玩 »，直达 https://madbarasa.github.io/AnimalChess/
     <br />
     <br />
     <a href="#玩法与操作">查看玩法</a>
