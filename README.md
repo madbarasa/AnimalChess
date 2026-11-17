@@ -48,11 +48,8 @@
 <!-- ABOUT THE PROJECT -->
 ## 关于项目
 
-[![产品截图][product-screenshot]](#关于项目)
 
 本项目是对经典桌游**斗兽棋**的 3D 化完全重制：真实 3D 棋盘场景、河道与陷阱立体呈现、棋子自带动画与特效，玩家执红方与蓝方 AI 对弈。
-
-所有规则逻辑与 Alpha-Beta 搜索均从原版 [AnimalChess](https://github.com/madbarasa/AnimalChess) 的 JS 代码逐行移植为 TypeScript，并与原引擎做了**走法交叉验证**（crosscheck），确保行为完全一致。
 
 核心亮点：
 
@@ -120,11 +117,9 @@
 
 AI 思考期间棋盘锁定，右上角实时显示 **AI 计算中...** 状态与思考进度：
 
-[![AI 计算中][ai-screenshot]](#ai-引擎)
 
 走子后右侧战报面板记录每回合日志——AI 搜索深度、展开节点数、耗时一目了然：
 
-[![对局画面][battle-screenshot]](#ai-引擎)
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
@@ -250,7 +245,6 @@ node scripts/verify-game.mjs http://127.0.0.1:5188/ # 浏览器端端到端验�
 
 * [othneildrew/Best-README-Template](https://github.com/othneildrew/Best-README-Template) — 本 README 模板
 * [Three.js](https://threejs.org/) — 3D 渲染
-* [AnimalChess 原版](https://github.com/madbarasa/AnimalChess) — 规则与 AI 引擎的移植来源
 * 图标与徽章来自 [Shields.io](https://shields.io/)
 
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
